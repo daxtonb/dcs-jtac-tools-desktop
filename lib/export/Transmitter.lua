@@ -3,18 +3,14 @@
     Sends user data over the network via UDP.
 ]]
 
-local Module = {}
+local __logger = require("Logger")
+local __socket = require("socket")
+__socket = __socket.try(__socket.udp())
+
 local Transmitter = {}
 
 local __socket
 local __logger
-
-function Module:new(socket, logger)
-    __socket = socket
-    __logger = logger
-
-    return Transmitter
-end
 
 function Transmitter:transmit_units(units)
     -- TODO
@@ -28,4 +24,4 @@ function Transmitter:dispose()
     self.socket:close()
 end
 
-return Module
+return Transmitter

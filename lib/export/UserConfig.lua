@@ -4,7 +4,9 @@
     of detecting config changes.
 ]]
 
-local lfs = require('lfs')
+local __lfs = require('lfs')
+local __logger = require("Logger")
+
 local Module = {}
 local UserConfig = {}
 
@@ -14,7 +16,7 @@ local __config
 local __last_updated
 
 local function get_config_file_modification_timestamp()
-    return lfs.attributes(__config_file_path, "modification")
+    return __lfs.attributes(__config_file_path, "modification")
 end
 
 local function load_user_config()
@@ -39,9 +41,8 @@ local function load_user_config()
     return config
 end
 
-function Module:new(config_file_path, logger)
+function Module:new(config_file_path)
     __config_file_path = config_file_path
-    __logger = logger
     UserConfig:reload()
 
     return UserConfig

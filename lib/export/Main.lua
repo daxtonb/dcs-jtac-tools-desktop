@@ -15,8 +15,8 @@ socket = socket.try(socket.udp())
 local Constants = require("Constants")
 local Logger = require("Logger")
 local UnitExporter = require("UnitExporter")
-local UserConfig = require("UserConfig"):new(config_file_path, Logger)
-local Transmitter = require("Transmitter"):new(socket, Logger)
+local UserConfig = require("UserConfig"):new(config_file_path)
+local Transmitter = require("Transmitter")
 
 local function handle_next_frame()
     current_frame = current_frame + 1
