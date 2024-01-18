@@ -9,9 +9,6 @@ __socket = __socket.try(__socket.udp())
 
 local Transmitter = {}
 
-local __socket
-local __logger
-
 function Transmitter:transmit_units(units)
     -- TODO
 end
