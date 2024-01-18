@@ -11,7 +11,6 @@ local Module = {}
 local UserConfig = {}
 
 local __config_file_path
-local __logger
 local __config
 local __last_updated
 
