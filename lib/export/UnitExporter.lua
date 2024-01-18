@@ -9,11 +9,11 @@ local UnitExporter = {}
 local __units_by_name = {}
 
 local function unit_coalition_is_flagged(unit, coalition_flag)
-    if unit.CoalitionID == Constants.unit_coalition.BLUFOR and coalition_flag & Constants.coalition_flags.BLUFOR then
+    if unit.CoalitionID == Constants.unit_coalition.BLUFOR and coalition_flag & Constants.coalition_flags.BLUFOR ~= 0 then
         return true
-    elseif unit.CoalitionID == Constants.unit_coalition.REDFOR and coalition_flag & Constants.coalition_flags.REDFOR then
+    elseif unit.CoalitionID == Constants.unit_coalition.REDFOR and coalition_flag & Constants.coalition_flags.REDFOR ~= 0 then
         return true
-    elseif unit.CoalitionID == Constants.unit_coalition.NETRUAL and coalition_flag & Constants.coalition_flags.NEUTRAL then
+    elseif unit.CoalitionID == Constants.unit_coalition.NETRUAL and coalition_flag & Constants.coalition_flags.NEUTRAL ~= 0 then
         return true
     else
         return false
@@ -21,11 +21,11 @@ local function unit_coalition_is_flagged(unit, coalition_flag)
 end
 
 local function unit_type_is_flagged(unit, unit_type_flag)
-    if unit.type == Constants.unit_type.GROUND and unit_type_flag & Constants.unit_type_flags.GROUND then
+    if unit.Type.level1 == Constants.unit_type.GROUND and unit_type_flag & Constants.unit_type_flags.GROUND ~= 0 then
         return true
-    elseif unit.type == Constants.unit_type.AIR and unit_type_flag & Constants.unit_type_flags.AIR then
+    elseif unit.Type.level1 == Constants.unit_type.AIR and unit_type_flag & Constants.unit_type_flags.AIR ~= 0 then
         return true
-    elseif unit.type == Constants.unit_type.SEA and unit_type_flag & Constants.unit_type_flags.SEA then
+    elseif unit.Type.level1 == Constants.unit_type.SEA and unit_type_flag & Constants.unit_type_flags.SEA ~= 0 then
         return true
     else
         return false
@@ -49,6 +49,7 @@ function UnitExporter:get_relevant_moved_units(coalition_flag, unit_type_flag)
             and unit_type_is_flagged(unit, unit_type_flag)
             and unit_has_moved(unit) then
                 moved_units[#moved_units + 1] = unit
+                __units_by_name[unit.UnitName] = unit
         end
     end
 

@@ -43,6 +43,7 @@ end
 
 local function dispose()
     Transmitter:dispose()
+    Logger:dispose()
 end
 
 LuaExportBeforeNextFrame = function()
