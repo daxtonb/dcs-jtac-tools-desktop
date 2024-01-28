@@ -1,6 +1,7 @@
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, BufWriter, Write},
+    net::IpAddr,
 };
 
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,9 @@ pub struct UserConfig {
 
     /// The frequency at which unit data should be exported from DCS.
     pub export_frequency_frames: i32,
+
+    /// The IP address of the device to transmit to.
+    pub device_ip_address: IpAddr,
 }
 
 impl UserConfig {
@@ -50,8 +54,8 @@ impl UserConfig {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::fs;
+mod integration_tests {
+    use std::{fs, net::Ipv4Addr};
 
     use super::UserConfig;
     use crate::user_config::{coalition_flag::CoalitionFlag, unit_type_flag::UnitTypeFlag};
@@ -65,14 +69,16 @@ mod tests {
             unit_type_flag: UnitTypeFlag::GROUND,
             user_unit_name: String::from("My Unit"),
             export_frequency_frames: 10,
+            device_ip_address: std::net::IpAddr::V4(Ipv4Addr::new(192, 168, 0, 1)),
         };
 
-        config.to_file(file_path)
+        config
+            .to_file(file_path)
             .expect("Failed to write UserConfig to file.");
 
         // Read
-        let config_from_file = UserConfig::from_file(file_path)
-            .expect("Failed to read UserConfig from file.");
+        let config_from_file =
+            UserConfig::from_file(file_path).expect("Failed to read UserConfig from file.");
 
         assert_eq!(config_from_file, config);
 
