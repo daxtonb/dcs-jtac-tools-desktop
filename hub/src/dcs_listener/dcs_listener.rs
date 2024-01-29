@@ -10,13 +10,13 @@ pub const DCS_LISTENER_BUFFER_SIZE: usize = 1024;
 /// Starts a thread that will continuously listen for the DCS units export.
 ///
 /// # Arguments
-/// * `units_handler` - Closure for handling any captured DCS units from the export.
-pub async fn listen<F>(units_handler: F) -> Result<(), Box<dyn Error>>
+/// * `unit_handler` - Closure for handling any captured DCS units from the export.
+pub async fn listen<F>(unit_handler: F) -> Result<(), Box<dyn Error>>
 where
     F: Fn(DcsUnit) + Send + Sync + 'static,
 {
     let socket = setup_socket().await?;
-    start_receiving_loop(socket, units_handler).await;
+    start_receiving_loop(socket, unit_handler).await;
 
     Ok(())
 }
