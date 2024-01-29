@@ -57,15 +57,17 @@ async fn receive_next(
         return Err("No data received".into());
     }
 
-    // Find the message delimiter in the datagram, then return the deserialized result
-    if let Some(position) = buffer[..size].iter().position(|&b| b == DCS_MSG_DELIMITER) {
-        let msg = String::from_utf8_lossy(&buffer[..position]);
-        let unit = serde_json::from_str::<DcsUnit>(&msg)?;
-        Ok(unit)
-    } else {
-        // Delimiter not found in the current datagram
-        Err("Message delimiter not found in the datagram".into())
+     // Iterate over the buffer to find the delimiter and extract the message
+     for (index, &byte) in buffer[..size].iter().enumerate() {
+        if byte == DCS_MSG_DELIMITER {
+            let msg = String::from_utf8_lossy(&buffer[..index]);
+            let unit = serde_json::from_str::<DcsUnit>(&msg)?;
+            return Ok(unit);
+        }
     }
+
+    // Delimiter not found in the current datagram
+    Err("Message delimiter not found in the datagram".into())
 }
 
 #[cfg(test)]
