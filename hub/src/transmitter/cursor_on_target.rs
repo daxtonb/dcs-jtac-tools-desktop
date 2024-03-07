@@ -10,12 +10,6 @@ pub struct Detail {
     callSign: String,
 }
 
-impl XmlSerializer for Detail {
-    fn to_xml(&self) -> String {
-        format!(r#"<detail><contact callsign="{}"/></detail>"#, self.callSign)
-    }
-}
-
 /// Geographical location of the CoT
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Point {
@@ -27,15 +21,6 @@ pub struct Point {
 
     /// Height above the WGS ellipsoid in meters
     hae: f32,
-}
-
-impl XmlSerializer for Point {
-    fn to_xml(&self) -> String {
-        format!(
-            r#"<point lat="{}"lon="{}"ce="0.0"hae="{}"le="0.0"/></event>"#,
-            self.lat, self.lon, self.hae
-        )
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -59,34 +44,40 @@ pub struct Event {
     detail: Detail,
 }
 
-impl XmlSerializer for Event {
-    fn to_xml(&self) -> String {
-        format!(
-            r#"<event version="2.0" uid="{}" type="{}" time="{}" start="{}" stale="{}">{}{}</event>"#, 
-            self.uid, self.unit_type, self.time, self.time, self.stale, self.point.to_xml(), self.detail.to_xml())
-    }
-}
-
 /// Encapsulates data needed to build XML for the CoT.
 pub struct CursorOnTarget {
     pub event: Event,
 }
 
 
-impl XmlSerializer for CursorOnTarget {
-    /// Builds an XML string.
-    fn to_xml(&self) -> String {
-        format!(
-            r#"<?xml version="1.0" standalone="yes"?>{}"#,
-            self.event.to_xml()
-        )
-    }
+fn detail_to_xml(detail: &Detail) -> String {
+    format!(r#"<detail><contact callsign="{}"/></detail>"#, detail.callSign)
 }
 
-/// XML data serializer.
-trait XmlSerializer {
-    fn to_xml(&self) -> String;
+fn point_to_xml(point: &Point) -> String {
+    format!(
+        r#"<point lat="{}"lon="{}"ce="0.0"hae="{}"le="0.0"/></event>"#,
+        point.lat, point.lon, point.hae
+    )
 }
+
+fn event_to_xml(event: &Event) -> String {
+    format!(
+        r#"<event version="2.0" uid="{}" type="{}" time="{}" start="{}" stale="{}">{}{}</event>"#, 
+        event.uid, event.unit_type, event.time, event.time, event.stale,
+        point_to_xml(&event.point),
+        detail_to_xml(&event.detail)
+    )
+}
+
+pub fn cursor_on_target_to_xml(cot: &CursorOnTarget) -> String {
+    format!(
+        r#"<?xml version="1.0" standalone="yes"?>{}"#,
+        event_to_xml(&cot.event)
+    )
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -115,7 +106,7 @@ mod tests {
         let expected_xml = r#"<?xml version="1.0" standalone="yes"?><event version="2.0" uid="a-h-A-M-F-U-M" type="J-01334" time="2005-04-05T11:43:38.07Z" start="2005-04-05T11:43:38.07Z" stale="2005-04-05T11:45:38.07Z"><point lat="30.0090027"lon="-85.9578735"ce="0.0"hae="-42.6"le="0.0"/></event><detail><contact callsign="Alpha"/></detail></event>"#;
 
         // Act
-        let generated_xml = cot.to_xml();
+        let generated_xml = cursor_on_target_to_xml(&cot);
 
         // Assert
         assert_eq!(generated_xml, expected_xml);
