@@ -12,7 +12,7 @@ pub struct Detail {
 
 impl XmlSerializer for Detail {
     fn to_xml(&self) -> String {
-        format!("<detail><contact callsign=\"{}\"/></detail>", self.callSign)
+        format!(r#"<detail><contact callsign="{}"/></detail>"#, self.callSign)
     }
 }
 
@@ -32,7 +32,7 @@ pub struct Point {
 impl XmlSerializer for Point {
     fn to_xml(&self) -> String {
         format!(
-            "<point lat=\"{}\"lon=\"{}\"ce=\"0.0\"hae=\"{}\"le=\"0.0\"/></event>",
+            r#"<point lat="{}"lon="{}"ce="0.0"hae="{}"le="0.0"/></event>"#,
             self.lat, self.lon, self.hae
         )
     }
@@ -62,7 +62,7 @@ pub struct Event {
 impl XmlSerializer for Event {
     fn to_xml(&self) -> String {
         format!(
-            "<event version=\"2.0\" uid=\"{}\" type=\"{}\" time=\"{}\" start=\"{}\" stale=\"{}\">{}{}</event>", 
+            r#"<event version="2.0" uid="{}" type="{}" time="{}" start="{}" stale="{}">{}{}</event>"#, 
             self.uid, self.unit_type, self.time, self.time, self.stale, self.point.to_xml(), self.detail.to_xml())
     }
 }
@@ -77,7 +77,7 @@ impl XmlSerializer for CursorOnTarget {
     /// Builds an XML string.
     fn to_xml(&self) -> String {
         format!(
-            "<?xml version=\"1.0\" standalone=\"yes\"?>{}",
+            r#"<?xml version="1.0" standalone="yes"?>{}"#,
             self.event.to_xml()
         )
     }
