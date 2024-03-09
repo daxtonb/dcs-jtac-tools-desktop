@@ -4,5 +4,8 @@
     ],
     "cSpell.enableFiletypes": [
         "lua"
+    ],
+    "rust-analyzer.linkedProjects": [
+        "./hub/Cargo.toml"
     ]
 }
