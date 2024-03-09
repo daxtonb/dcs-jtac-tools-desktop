@@ -57,8 +57,8 @@ async fn receive_next(
         return Err("No data received".into());
     }
 
-     // Iterate over the buffer to find the delimiter and extract the message
-     for (index, &byte) in buffer[..size].iter().enumerate() {
+    // Iterate over the buffer to find the delimiter and extract the message
+    for (index, &byte) in buffer[..size].iter().enumerate() {
         if byte == DCS_MSG_DELIMITER {
             let msg = String::from_utf8_lossy(&buffer[..index]);
             let unit = serde_json::from_str::<DcsUnit>(&msg)?;
@@ -86,6 +86,13 @@ mod integration_tests {
         for _ in 0..3 {
             units.push(DcsUnit {
                 group_name: String::from("test"),
+                unit_name: todo!(),
+                coalition: todo!(),
+                position: todo!(),
+                unit_type: todo!(),
+                date: todo!(),
+                mission_start_time: todo!(),
+                mission_time_elapsed: todo!(),
             });
         }
 
@@ -95,6 +102,8 @@ mod integration_tests {
             let tx = tx.clone();
             move |received_unit: DcsUnit| {
                 let tx = tx.clone();
+
+                // Transmit the received unit for future assertion
                 tokio::spawn(async move {
                     tx.send(received_unit).await.expect("Failed to send signal");
                 });

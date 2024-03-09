@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::dcs_listener::dcs_unit::DcsUnit;
+
 // Used for building and serializing cursor-on-target data
 // See https://www.mitre.org/sites/default/files/pdf/09_4937.pdf
 
@@ -49,6 +51,25 @@ pub struct CursorOnTarget {
     pub event: Event,
 }
 
+
+pub fn cursor_on_target_from_dcs_unit(unit: &DcsUnit) -> CursorOnTarget {
+    CursorOnTarget {
+        event: Event {
+            point: Point {
+                lat: todo!(),
+                lon: todo!(),
+                hae: todo!(),
+            },
+            detail: Detail {
+                callSign: todo!(),
+            },
+            unit_type: todo!(),
+            uid: todo!(),
+            time: todo!(),
+            stale: todo!(),
+        }
+    }
+}
 
 fn detail_to_xml(detail: &Detail) -> String {
     format!(r#"<detail><contact callsign="{}"/></detail>"#, detail.callSign)
