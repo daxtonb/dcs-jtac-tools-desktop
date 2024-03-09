@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::dcs_listener::dcs_unit::DcsUnit;
+use crate::common::dcs_unit::DcsUnit;
 
 // Used for building and serializing cursor-on-target data
 // See https://www.mitre.org/sites/default/files/pdf/09_4937.pdf

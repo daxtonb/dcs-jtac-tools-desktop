@@ -1,7 +1,7 @@
 use std::error::Error;
 use tokio::{net::UdpSocket, task::JoinHandle};
 
-use super::dcs_unit::DcsUnit;
+use crate::common::dcs_unit::DcsUnit;
 
 pub const DCS_LISTENER_PORT: u16 = 34254;
 pub const DCS_MSG_DELIMITER: u8 = b'\n';
@@ -75,7 +75,7 @@ mod integration_tests {
 
     use tokio::net::UdpSocket;
 
-    use crate::dcs_listener::dcs_unit::{Coalition, DcsUnit, Position3D, UnitType};
+    use crate::common::dcs_unit::{Coalition, DcsUnit, Position3D, UnitType};
 
     use super::{listen, DCS_LISTENER_PORT, DCS_MSG_DELIMITER};
 
