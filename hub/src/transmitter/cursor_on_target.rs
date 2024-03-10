@@ -1,20 +1,38 @@
+use chrono::{Duration, ParseError};
 use serde::{Deserialize, Serialize};
 
-use crate::common::dcs_unit::DcsUnit;
+use crate::common::dcs_unit::{DcsUnit, MissionTimeCalculator};
+
+use super::atomic_event::AtomicEvent;
 
 // Used for building and serializing cursor-on-target data
 // See https://www.mitre.org/sites/default/files/pdf/09_4937.pdf
 
+/// Used to handle XML serialization
+trait ToXml {
+    /// Serialize to an XML string.
+    fn to_xml(&self) -> String;
+}
+
 /// An optional element used to hold CoT sub-schema.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Detail {
+struct Detail {
     /// The unit call sign of the CoT
-    callSign: String,
+    call_sign: String,
+}
+
+impl ToXml for Detail {
+    fn to_xml(&self) -> String {
+        format!(
+            r#"<detail><contact callsign="{}"/></detail>"#,
+            self.call_sign
+        )
+    }
 }
 
 /// Geographical location of the CoT
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Point {
+struct Point {
     /// Latitude referred to the WGS 84 ellipsoid in degrees
     lat: f64,
 
@@ -25,8 +43,17 @@ pub struct Point {
     hae: f32,
 }
 
+impl ToXml for Point {
+    fn to_xml(&self) -> String {
+        format!(
+            r#"<point lat="{}" lon="{}" ce="0.0" hae="{}" le="0.0"/>"#,
+            self.lat, self.lon, self.hae
+        )
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Event {
+struct Event {
     /// Hierarchically organized hint about event type.
     unit_type: String,
 
@@ -46,90 +73,80 @@ pub struct Event {
     detail: Detail,
 }
 
-/// Encapsulates data needed to build XML for the CoT.
-pub struct CursorOnTarget {
-    pub event: Event,
-}
-
-
-pub fn cursor_on_target_from_dcs_unit(unit: &DcsUnit) -> CursorOnTarget {
-    CursorOnTarget {
-        event: Event {
-            point: Point {
-                lat: todo!(),
-                lon: todo!(),
-                hae: todo!(),
-            },
-            detail: Detail {
-                callSign: todo!(),
-            },
-            unit_type: todo!(),
-            uid: todo!(),
-            time: todo!(),
-            stale: todo!(),
-        }
+impl ToXml for Event {
+    fn to_xml(&self) -> String {
+        format!(
+            r#"<?xml version="1.0" standalone="yes"?><event version="2.0" uid="{}" type="{}" time="{}" start="{}" stale="{}">{}{}</event>"#,
+            self.uid,
+            self.unit_type,
+            self.time,
+            self.time,
+            self.stale,
+            self.point.to_xml(),
+            self.detail.to_xml()
+        )
     }
 }
 
-fn detail_to_xml(detail: &Detail) -> String {
-    format!(r#"<detail><contact callsign="{}"/></detail>"#, detail.callSign)
+pub struct XmlSerializer;
+
+impl XmlSerializer {
+    pub fn serialize_dcs_unit(unit: &DcsUnit) -> Result<String, ParseError> {
+        let mission_time = unit.calculate_mission_time()?;
+
+        let event = Event {
+            point: Point {
+                lat: unit.position.latitude,
+                lon: unit.position.longitude,
+                hae: unit.position.altitude,
+            },
+            detail: Detail {
+                call_sign: unit.unit_name.to_string(),
+            },
+            unit_type: AtomicEvent::from(&unit).to_string(),
+            uid: unit.unit_name.clone(),
+            time: mission_time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            stale: (mission_time + Duration::try_minutes(1).unwrap())
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        };
+
+        Ok(event.to_xml())
+    }
 }
-
-fn point_to_xml(point: &Point) -> String {
-    format!(
-        r#"<point lat="{}"lon="{}"ce="0.0"hae="{}"le="0.0"/></event>"#,
-        point.lat, point.lon, point.hae
-    )
-}
-
-fn event_to_xml(event: &Event) -> String {
-    format!(
-        r#"<event version="2.0" uid="{}" type="{}" time="{}" start="{}" stale="{}">{}{}</event>"#, 
-        event.uid, event.unit_type, event.time, event.time, event.stale,
-        point_to_xml(&event.point),
-        detail_to_xml(&event.detail)
-    )
-}
-
-pub fn cursor_on_target_to_xml(cot: &CursorOnTarget) -> String {
-    format!(
-        r#"<?xml version="1.0" standalone="yes"?>{}"#,
-        event_to_xml(&cot.event)
-    )
-}
-
-
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
+    use crate::common::dcs_unit::{Coalition, Position3D, UnitType};
+
     use super::*;
 
     #[test]
-    fn test_cursor_on_target_to_xml() {
+    fn given_dcs_unit_when_serialized_then_xml_is_generated_as_cot() {
         // Arrange
-        let cot = CursorOnTarget {
-            event: Event {
-                unit_type: "J-01334".to_string(),
-                uid: "a-h-A-M-F-U-M".to_string(),
-                time: "2005-04-05T11:43:38.07Z".to_string(),
-                stale: "2005-04-05T11:45:38.07Z".to_string(),
-                point: Point {
-                    lat: 30.0090027,
-                    lon: -85.9578735,
-                    hae: -42.6,
-                },
-                detail: Detail {
-                    callSign: "Alpha".to_string(),
-                },
+        let unit = DcsUnit {
+            unit_name: "J-01334".to_string(),
+            group_name: "J-01335".to_string(),
+            coalition: Coalition::REDFOR,
+            position: Position3D {
+                latitude: 30.0090027,
+                longitude: -85.9578735,
+                altitude: -42.6,
             },
+            unit_type: UnitType {
+                level_1: 'A',
+                level_2: 'M',
+            },
+            date: "2005-04-05".to_string(),
+            mission_start_time: 42_000,
+            mission_time_elapsed: 218,
         };
-
-        let expected_xml = r#"<?xml version="1.0" standalone="yes"?><event version="2.0" uid="a-h-A-M-F-U-M" type="J-01334" time="2005-04-05T11:43:38.07Z" start="2005-04-05T11:43:38.07Z" stale="2005-04-05T11:45:38.07Z"><point lat="30.0090027"lon="-85.9578735"ce="0.0"hae="-42.6"le="0.0"/></event><detail><contact callsign="Alpha"/></detail></event>"#;
+        let expected = r#"<?xml version="1.0" standalone="yes"?><event version="2.0" uid="J-01334" type="a-h-A-M" time="2005-04-05T11:43:38Z" start="2005-04-05T11:43:38Z" stale="2005-04-05T11:44:38Z"><point lat="30.0090027" lon="-85.9578735" ce="0.0" hae="-42.6" le="0.0"/><detail><contact callsign="J-01334"/></detail></event>"#;
 
         // Act
-        let generated_xml = cursor_on_target_to_xml(&cot);
+        let result =
+            XmlSerializer::serialize_dcs_unit(&unit).expect("DCS unit XML serialization failed.");
 
         // Assert
-        assert_eq!(generated_xml, expected_xml);
+        assert_eq!(result, expected);
     }
 }
