@@ -35,7 +35,7 @@ function exportWorldObjects()
     for _, obj in pairs(worldObjects) do
         -- We only care about active and non-static units
         if obj.Flags.Born and not obj.Flags.Static then
-            local jsonData = string.format([[{"unit_name":"%s","group_name":"%s","coalition":%d,"position":{"latitude":%f,"longitude":%f,"altitude":%f},"unit_type":{"level_1":"%s","level_2":"%s"},"mission_date":"%s","mission_start_time":%d,"mission_time_elapsed":%d}]],
+            local jsonData = string.format([[{"unit_name":"%s","group_name":"%s","coalition":%d,"position":{"latitude":%f,"longitude":%f,"altitude":%f},"unit_type":{"level_1":"%s","level_2":"%s"},"mission_date":"%s","mission_start_time":%d,"mission_time_elapsed":%d}\n]],
             obj.Name,
             obj.GroupName,
             obj.Coalition,
