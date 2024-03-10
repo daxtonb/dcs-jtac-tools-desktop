@@ -1,7 +1,7 @@
 use std::error::Error;
 use tokio::{net::UdpSocket, task::JoinHandle};
 
-use super::dcs_unit::DcsUnit;
+use crate::common::dcs_unit::DcsUnit;
 
 pub const DCS_LISTENER_PORT: u16 = 34254;
 pub const DCS_MSG_DELIMITER: u8 = b'\n';
@@ -75,7 +75,7 @@ mod integration_tests {
 
     use tokio::net::UdpSocket;
 
-    use crate::dcs_listener::dcs_unit::DcsUnit;
+    use crate::common::dcs_unit::{Coalition, DcsUnit, Position3D, UnitType};
 
     use super::{listen, DCS_LISTENER_PORT, DCS_MSG_DELIMITER};
 
@@ -83,16 +83,23 @@ mod integration_tests {
     async fn test_listen() {
         // Create a few units
         let mut units = Vec::new();
-        for _ in 0..3 {
+        for i in 0..3 {
             units.push(DcsUnit {
-                group_name: String::from("test"),
-                unit_name: todo!(),
-                coalition: todo!(),
-                position: todo!(),
-                unit_type: todo!(),
-                date: todo!(),
-                mission_start_time: todo!(),
-                mission_time_elapsed: todo!(),
+                unit_name: format!("UNIT-{}", i),
+                group_name: format!("GROUP-{}", i),
+                coalition: Coalition::BLUFOR,
+                position: Position3D {
+                    latitude: 30.0090027 + (i as f64),
+                    longitude: -85.9578735 + (i as f64),
+                    altitude: 132.67 + (i as f32),
+                },
+                unit_type: UnitType {
+                    level_1: 'A',
+                    level_2: 'B',
+                },
+                date: "2024-03-08".to_string(),
+                mission_start_time: 28800,
+                mission_time_elapsed: 3600,
             });
         }
 
