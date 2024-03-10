@@ -136,7 +136,7 @@ mod unit_tests {
                 level_1: 'A',
                 level_2: 'M',
             },
-            date: "2005-04-05".to_string(),
+            mission_date: "2005-04-05".to_string(),
             mission_start_time: 42_000,
             mission_time_elapsed: 218,
         };

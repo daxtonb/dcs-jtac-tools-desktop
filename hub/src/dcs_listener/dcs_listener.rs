@@ -97,7 +97,7 @@ mod integration_tests {
                     level_1: 'A',
                     level_2: 'B',
                 },
-                date: "2024-03-08".to_string(),
+                mission_date: "2024-03-08".to_string(),
                 mission_start_time: 28800,
                 mission_time_elapsed: 3600,
             });

@@ -73,7 +73,7 @@ pub struct DcsUnit {
     pub unit_type: UnitType,
 
     /// The date of the mission
-    pub date: String,
+    pub mission_date: String,
 
     /// The start time of the mission
     pub mission_start_time: i32,
@@ -95,7 +95,11 @@ impl MissionTimeCalculator for DcsUnit {
         let minute = (current_time_sec % 3600) / 60;
         let second = current_time_sec % 60;
 
-        format!("{}T{:02}:{:02}:{:02}Z", self.date, hour, minute, second).parse::<DateTime<Utc>>()
+        format!(
+            "{}T{:02}:{:02}:{:02}Z",
+            self.mission_date, hour, minute, second
+        )
+        .parse::<DateTime<Utc>>()
     }
 }
 
@@ -113,7 +117,7 @@ mod unit_tests {
     #[test]
     fn given_json_string_when_deserialized_then_deserialization_succeeds() {
         // Arrange
-        let json = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67},"unit_type":{"level_1":"A","level_2":"B","level_3":"C","level_4":null},"date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
+        let json = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67},"unit_type":{"level_1":"A","level_2":"B","level_3":"C","level_4":null},"mission_date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
         let expected = build_dcs_unit();
 
         // Act
@@ -126,7 +130,7 @@ mod unit_tests {
     #[test]
     fn given_json_string_when_serialized_then_json_string_serialization_succeeds() {
         // Arrange
-        let expected = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67},"unit_type":{"level_1":"A","level_2":"B"},"date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
+        let expected = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67},"unit_type":{"level_1":"A","level_2":"B"},"mission_date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
         let dcs_unit = build_dcs_unit();
 
         // Act
@@ -155,7 +159,7 @@ mod unit_tests {
     fn given_malformed_date_info_when_deserialized_then_returns_error() {
         // Arrange
         let mut dcs_unit = build_dcs_unit();
-        dcs_unit.date = "2023-13-08".to_string();
+        dcs_unit.mission_date = "2023-13-08".to_string();
 
         // Act
         let result = dcs_unit.calculate_mission_time();
@@ -181,7 +185,7 @@ mod unit_tests {
                 level_1: 'A',
                 level_2: 'B',
             },
-            date: "2024-03-08".to_string(),
+            mission_date: "2024-03-08".to_string(),
             mission_start_time: 28800,
             mission_time_elapsed: 3600,
         }
