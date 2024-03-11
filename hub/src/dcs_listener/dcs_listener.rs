@@ -27,6 +27,8 @@ where
 {
     let buffer = [0u8; DCS_LISTENER_BUFFER_SIZE];
 
+    println!("Waiting for data...");
+    
     tokio::spawn(async move {
         loop {
             match receive_next(&socket, buffer).await {
