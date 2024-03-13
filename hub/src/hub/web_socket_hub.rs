@@ -64,6 +64,7 @@ impl WebSocketHub {
 
     /// Sends a message to all subscribers.
     pub async fn broadcast_message(&self, message: String) -> Result<(), Error> {
+        // TODO: Explore the possibility of a more granular/semantic lock
         let clients = self.clients_by_id.lock().await;
 
         // Send messages to each client in parallel
@@ -73,7 +74,6 @@ impl WebSocketHub {
                 let message = message.clone();
                 let client = client.clone();
                 async move {
-                    // TODO: Explore the possibility of a more granular/semantic lock
                     let mut client = client.lock().await;
 
                     // Messages are not anticipated to be large
@@ -140,4 +140,65 @@ impl WebSocketHub {
 }
 
 #[cfg(test)]
-mod integration_tests {}
+mod integration_tests {
+    use super::*;
+    use tokio::net::TcpStream;
+    use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+    use futures_util::sink::SinkExt;
+    use futures_util::stream::StreamExt;
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    #[tokio::test]
+    async fn test_client_connect_broadcast_and_disconnect() {
+        // Start WebSocketHub on an available port (e.g., 0 lets the OS choose the port).
+        let hub = Arc::new(WebSocketHub::new(6655));
+        let hub_clone = hub.clone();
+        let port = hub.port;
+        tokio::spawn(async move {
+            hub.start().await.expect("Failed to start the WebSocketHub");
+        });
+
+        // Give the server a moment to start up.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Connect a client to the WebSocketHub.
+        let url = format!("ws://127.0.0.1:{}", port);
+        let (mut ws_stream, _) = connect_async(url)
+            .await
+            .expect("Failed to connect to WebSocketHub");
+
+        // Send a message from the client to test broadcasting.
+        // let test_message = "Hello, WebSocketHub!";
+        // ws_stream
+        //     .send(Message::Text(test_message.to_string()))
+        //     .await
+        //     .expect("Failed to send message from client");
+
+        // Broadcast a message to all clients, including the one we just connected.
+        let broadcast_message = "Broadcast message from hub";
+        hub_clone.broadcast_message(broadcast_message.to_string())
+            .await
+            .expect("Failed to broadcast message");
+
+        // Try to receive the broadcast message on the client side.
+        if let Ok(Some(message)) = timeout(Duration::from_secs(5), ws_stream.next()).await {
+            match message {
+                Ok(msg) => match msg {
+                    Message::Text(text) => assert_eq!(text, broadcast_message),
+                    _ => panic!("Received a non-text message."),
+                },
+                Err(e) => panic!("Error receiving message: {:?}", e),
+            }
+        } else {
+            panic!("Did not receive broadcast message in time.");
+        }
+
+        // Disconnect the client.
+        ws_stream.close(None).await.expect("Failed to close the WebSocket stream");
+
+        // Optionally, ensure the server has processed the disconnection. This may involve
+        // additional logic in your server to track disconnections or using sleeps for simplicity.
+    }
+}
+
