@@ -21,25 +21,23 @@ where
     Ok(())
 }
 
-async fn start_receiving_loop<F>(socket: UdpSocket, unit_handler: F) -> JoinHandle<()>
+async fn start_receiving_loop<F>(socket: UdpSocket, unit_handler: F)
 where
     F: Fn(DcsUnit) + Send + Sync + 'static,
 {
     let buffer = [0u8; DCS_LISTENER_BUFFER_SIZE];
 
     println!("Waiting for data...");
-    
-    tokio::spawn(async move {
-        loop {
-            match receive_next(&socket, buffer).await {
-                Ok(unit) => unit_handler(unit),
-                Err(e) => {
-                    println!("Error receiving message: {}", e);
-                    break;
-                }
+
+    loop {
+        match receive_next(&socket, buffer).await {
+            Ok(unit) => unit_handler(unit),
+            Err(e) => {
+                println!("Error receiving message: {}", e);
+                break;
             }
         }
-    })
+    }
 }
 
 async fn setup_socket() -> Result<UdpSocket, Box<dyn Error>> {
