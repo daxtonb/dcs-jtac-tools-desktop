@@ -1,46 +1,37 @@
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 
 use common::dcs_unit::DcsUnit;
 use dcs_listener::dcs_listener::listen;
+use hub::web_socket_hub::WebSocketHub;
 use tokio::io::{stdin, AsyncBufReadExt, BufReader};
 
+use crate::transmitter::cursor_on_target::XmlSerializer;
+
 mod common;
-mod user_config;
 mod dcs_listener;
-mod transmitter;
 mod hub;
+mod transmitter;
+mod user_config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Start the listener in the background
-    let listener_handle = tokio::spawn(async {
-        let unit_handler = |unit: DcsUnit| {
-            // Handle the unit here
-            println!("Received unit: {:?}", unit);
-        };
+    let hub = Arc::new(WebSocketHub::new(9345));
+    let hub_clone = hub.clone();
+    tokio::spawn(async move { hub.start().await });
 
-        if let Err(e) = listen(unit_handler).await {
-            println!("Listener error: {}", e);
-        }
-    });
-
-    let user_input_handle = tokio::spawn(async {
-        let mut reader = BufReader::new(stdin()).lines();
-
-        while let Ok(Some(line)) = reader.next_line().await {
-            match line.as_str() {
-                "stop" => {
-                    // Implement the logic to stop the listener
-                    println!("Stopping listener...");
-                    break;
-                },
-                _ => println!("Unknown command"),
+    let unit_handler = move |unit: DcsUnit| {
+        println!("Received unit: {:?}", unit);
+        match XmlSerializer::serialize_dcs_unit(&unit) {
+            Ok(xml) => {
+                hub_clone.broadcast_message(xml);
             }
+            Err(err) => eprintln!("Failed to serialize DCS unit: {:?}", err),
         }
-    });
+    };
 
-    // Wait for both tasks to complete
-    let _ = tokio::try_join!(listener_handle, user_input_handle);
-    
+    if let Err(e) = listen(unit_handler).await {
+        eprintln!("Listener error: {}", e);
+    }
+
     Ok(())
 }

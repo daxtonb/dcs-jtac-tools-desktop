@@ -4,15 +4,16 @@ use std::sync::{
 };
 
 use futures_util::{future::join_all, lock::Mutex, SinkExt, StreamExt};
-use tokio::net::TcpListener;
+use tokio::{
+    net::TcpListener,
+    sync::mpsc::{channel, Receiver, Sender},
+};
 use tokio_tungstenite::{
     accept_async,
     tungstenite::{Error, Message},
 };
 
-use super::{
-    client_session::ClientSession, ClientsByIdRead, ClientsByIdWrite,
-};
+use super::{client_session::ClientSession, ClientsByIdRead, ClientsByIdWrite};
 
 /// Hub for managing web socket communication.
 pub struct WebSocketHub {
@@ -20,17 +21,24 @@ pub struct WebSocketHub {
     clients_by_id_write: ClientsByIdWrite,
     port: u16,
     next_client_id: Arc<AtomicU32>,
+    message_sender: Sender<String>,
 }
 
 impl WebSocketHub {
     /// Instantiates a new `WebSocketHub` for a port.
     pub fn new(port: u16) -> WebSocketHub {
-        WebSocketHub {
+        let (message_sender, message_receiver) = channel(1024);
+
+        let hub = WebSocketHub {
             clients_by_id_read: ClientsByIdRead::default(),
             clients_by_id_write: ClientsByIdWrite::default(),
             port: port,
             next_client_id: Arc::new(AtomicU32::new(0)),
-        }
+            message_sender: message_sender,
+        };
+
+        hub.start_broadcast_task(message_receiver);
+        hub
     }
 
     /// Initiates listening for subscribers.
@@ -52,69 +60,71 @@ impl WebSocketHub {
             let (write_half, read_half) = ws_stream.split();
             let client_read = Arc::new(Mutex::new(read_half));
             let client_write = Arc::new(Mutex::new(write_half));
-
-            // Spawn a task for handling and tracking the new client
-            tokio::spawn(async move {
-                let client_session = ClientSession::new(
-                    client_id,
-                    clients_by_id_read,
-                    clients_by_id_write,
-                    client_read,
-                    client_write,
-                )
-                .await;
-                Self::listen_to_client(client_session).await;
-            });
+            let client_session = ClientSession::new(
+                client_id,
+                clients_by_id_read,
+                clients_by_id_write,
+                client_read,
+                client_write,
+            )
+            .await;
+            Self::start_client_listen_task(client_session).await;
         }
 
         Ok(())
     }
 
     /// Sends a message to all subscribers.
-    pub async fn broadcast_message(&self, message: String) -> Result<(), Error> {
-        // TODO: Explore the possibility of a more granular/semantic lock
-        let clients = self.clients_by_id_write.lock().await;
-
-        // Send messages to each client in parallel
-        let futures: Vec<_> = clients
-            .iter()
-            .map(|(_, client)| {
-                let message = message.clone();
-                let client = client.clone();
-                async move {
-                    let mut client = client.lock().await;
-
-                    // Messages are not anticipated to be large
-                    client.send(Message::text(message)).await
-                }
-            })
-            .collect();
-
-        join_all(futures)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(())
+    pub fn broadcast_message(&self, message: String) {
+        let message_sender = self.message_sender.clone();
+        tokio::spawn(async move {
+            match message_sender.send(message.clone()).await {
+                Ok(_) => println!("Message sent to clients: {}", message),
+                Err(err) => eprintln!("Failed to send message to clients: {}", err),
+            }
+        });
     }
 
-   
-    async fn listen_to_client(client_session: ClientSession) {
-        // Here we're just looping to detect disconnection.
-        while let Some(result) = client_session.client_read.lock().await.next().await {
-            match result {
-                Ok(_) => {
-                    // TODO: handle incoming client messages
-                }
-                Err(e) => {
-                    eprintln!(
-                        "Error on WebSocket for client {:?}: {:?}",
-                        client_session.client_id, e
-                    );
-                    break; // Exit gracefully
+    async fn start_client_listen_task(client_session: ClientSession) {
+        tokio::spawn(async move {
+            // Here we're just looping to detect disconnection.
+            while let Some(result) = client_session.client_read.lock().await.next().await {
+                match result {
+                    Ok(_) => {
+                        // TODO: handle incoming client messages
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Error on WebSocket for client {:?}: {:?}",
+                            client_session.client_id, e
+                        );
+                        break; // Exit gracefully
+                    }
                 }
             }
-        }
+        });
+    }
+
+    fn start_broadcast_task(&self, mut message_receiver: Receiver<String>) {
+        let clients_by_id_write = self.clients_by_id_write.clone();
+        tokio::spawn(async move {
+            // Send messages to each client in parallel
+            while let Some(message) = message_receiver.recv().await {
+                let clients = clients_by_id_write.lock().await;
+                let futures: Vec<_> = clients
+                    .iter()
+                    .map(|(_, client)| {
+                        let message = message.clone();
+                        let client = client.clone();
+                        async move {
+                            let mut client = client.lock().await;
+                            client.send(Message::text(message)).await
+                        }
+                    })
+                    .collect();
+                join_all(futures).await; // Ignoring errors for simplicity, handle as needed
+            }
+        });
     }
 }
 
@@ -155,10 +165,7 @@ mod integration_tests {
 
         // Broadcast a message to all clients, including the one we just connected.
         let broadcast_message = "Broadcast message from hub";
-        hub_clone
-            .broadcast_message(broadcast_message.to_string())
-            .await
-            .expect("Failed to broadcast message");
+        hub_clone.broadcast_message(broadcast_message.to_string());
 
         // Try to receive the broadcast message on the client side.
         if let Ok(Some(message)) = timeout(Duration::from_secs(5), ws_stream.next()).await {
