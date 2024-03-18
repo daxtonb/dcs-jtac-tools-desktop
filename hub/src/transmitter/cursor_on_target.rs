@@ -116,7 +116,7 @@ impl XmlSerializer {
 
 #[cfg(test)]
 mod unit_tests {
-    use crate::common::dcs_unit::{Coalition, Position3D, UnitType};
+    use crate::common::{dcs_unit::{Coalition, Position3D, UnitType}, unit_type::Level1UnitType};
 
     use super::*;
 
@@ -134,14 +134,14 @@ mod unit_tests {
                 heading: 0.0568 
             },
             unit_type: UnitType {
-                level_1: 'A',
-                level_2: 'M',
+                level_1: Level1UnitType::AIR,
+                level_2: 1,
             },
             mission_date: "2005-04-05".to_string(),
             mission_start_time: 42_000,
             mission_time_elapsed: 218,
         };
-        let expected = r#"<?xml version="1.0" standalone="yes"?><event version="2.0" uid="J-01334" type="a-h-A-M" time="2005-04-05T11:43:38Z" start="2005-04-05T11:43:38Z" stale="2005-04-05T11:44:38Z"><point lat="30.0090027" lon="-85.9578735" ce="0.0" hae="-42.6" le="0.0"/><detail><contact callsign="J-01334"/></detail></event>"#;
+        let expected = r#"<?xml version="1.0" standalone="yes"?><event version="2.0" uid="J-01334" type="a-h-A" time="2005-04-05T11:43:38Z" start="2005-04-05T11:43:38Z" stale="2005-04-05T11:44:38Z"><point lat="30.0090027" lon="-85.9578735" ce="0.0" hae="-42.6" le="0.0"/><detail><contact callsign="J-01334"/></detail></event>"#;
 
         // Act
         let result =

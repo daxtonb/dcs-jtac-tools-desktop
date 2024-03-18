@@ -78,7 +78,7 @@ mod integration_tests {
     use futures_util::future::join_all;
     use tokio::{net::UdpSocket, time::timeout};
 
-    use crate::common::dcs_unit::{Coalition, DcsUnit, Position3D, UnitType};
+    use crate::common::{dcs_unit::{Coalition, DcsUnit, Position3D, UnitType}, unit_type::Level1UnitType};
 
     use super::{listen, DCS_LISTENER_PORT, DCS_MSG_DELIMITER};
 
@@ -98,8 +98,8 @@ mod integration_tests {
                     heading: 0.0568 + (i as f64),
                 },
                 unit_type: UnitType {
-                    level_1: 'A',
-                    level_2: 'B',
+                    level_1: Level1UnitType::AIR,
+                    level_2: 1,
                 },
                 mission_date: "2024-03-08".to_string(),
                 mission_start_time: 28800,
