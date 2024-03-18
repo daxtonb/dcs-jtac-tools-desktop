@@ -52,6 +52,9 @@ pub struct Position3D {
 
     /// Elevation of the unit
     pub altitude: f32,
+
+    /// The heading of the unit (in radians)
+    pub heading: f64,
 }
 
 /// Models the exported DCS unit
@@ -117,7 +120,7 @@ mod unit_tests {
     #[test]
     fn given_json_string_when_deserialized_then_deserialization_succeeds() {
         // Arrange
-        let json = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67},"unit_type":{"level_1":"A","level_2":"B","level_3":"C","level_4":null},"mission_date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
+        let json = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67,"heading":2.0034},"unit_type":{"level_1":"A","level_2":"B","level_3":"C","level_4":null},"mission_date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
         let expected = build_dcs_unit();
 
         // Act
@@ -130,7 +133,7 @@ mod unit_tests {
     #[test]
     fn given_json_string_when_serialized_then_json_string_serialization_succeeds() {
         // Arrange
-        let expected = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67},"unit_type":{"level_1":"A","level_2":"B"},"mission_date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
+        let expected = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67,"heading":2.0034},"unit_type":{"level_1":"A","level_2":"B"},"mission_date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
         let dcs_unit = build_dcs_unit();
 
         // Act
@@ -180,6 +183,7 @@ mod unit_tests {
                 latitude: 30.0090027,
                 longitude: -85.9578735,
                 altitude: 132.67,
+                heading: 2.0034,
             },
             unit_type: UnitType {
                 level_1: 'A',

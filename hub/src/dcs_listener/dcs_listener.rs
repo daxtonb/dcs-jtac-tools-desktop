@@ -73,7 +73,10 @@ async fn receive_next(
 #[cfg(test)]
 mod integration_tests {
 
-    use tokio::net::UdpSocket;
+    use std::time::Duration;
+
+    use futures_util::future::join_all;
+    use tokio::{net::UdpSocket, time::timeout};
 
     use crate::common::dcs_unit::{Coalition, DcsUnit, Position3D, UnitType};
 
@@ -92,6 +95,7 @@ mod integration_tests {
                     latitude: 30.0090027 + (i as f64),
                     longitude: -85.9578735 + (i as f64),
                     altitude: 132.67 + (i as f32),
+                    heading: 0.0568 + (i as f64),
                 },
                 unit_type: UnitType {
                     level_1: 'A',
@@ -146,7 +150,7 @@ mod integration_tests {
 
         // Check if all units were received
         let mut units_count = 0;
-        while let Some(unit) = rx.recv().await {
+        while let Ok(Some(unit)) = timeout(Duration::from_secs(5), rx.recv()).await {
             assert!(units.contains(&unit));
             units_count += 1;
 
@@ -156,7 +160,5 @@ mod integration_tests {
         }
 
         assert_eq!(units_count, units.len());
-
-        list_task.await.unwrap();
     }
 }

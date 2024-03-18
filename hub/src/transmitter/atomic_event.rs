@@ -61,6 +61,7 @@ mod unit_tests {
                 latitude: 30.0090027,
                 longitude: -85.9578735,
                 altitude: -42.6,
+                heading: 0.0568,
             },
             unit_type: UnitType {
                 level_1: 'A',

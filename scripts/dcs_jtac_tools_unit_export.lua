@@ -1,59 +1,97 @@
-local socket = require("socket")
-local logger = require("logger")
-local udp = socket.udp()
-udp:settimeout(0)
-udp:setpeername("127.0.0.1", 34254)
+-----------------------------------------------------------
+--                     Dependencies
+-----------------------------------------------------------
+dofile("./Config/World/World.lua")
+package.path = package.path .. ";.\\LuaSocket\\?.lua"
+package.cpath = package.cpath .. ";.\\LuaSocket\\?.dll"
 
-local frameCounter = 0
-local exportFrequency = 10
+-----------------------------------------------------------
+--                  DCS JTAC Tools
+-----------------------------------------------------------
+local DcsJtacTools = {}
 
-function LuaExportStart()
-    -- Initialization of your export logic if needed
+function DcsJtacTools:Initialize()
+    self.frameFrequency = 10
+    self.address = "127.0.0.1"
+    self.port = "8080"
+
+    local userProfile = os.getenv("userprofile"):gsub("\\","/")
+    self.log_file = io.open(userProfile .. "/Saved Games/DCS.openbeta/Logs/DcsJtacTools.log", 'w')
+    self:log('Initializing DCS JTAC Tools')
+    self:log(string.format("emitting to %s:%s every %d frames", self.address, self.port, self.frameFrequency))
+    
+    self.socket = require("socket")
+    self.udp = self.socket.try(self.socket.udp())
+    self.currentFrame = 0
+    self.missionStartTime = LoGetMissionStartTime()
 end
 
-function LuaExportActivityNextEvent(t)
-    local _, err = pcall(function()
-        frameCounter = frameCounter + 1
-        if frameCounter % exportFrequency == 0 then
-            exportWorldObjects()
-        end
-    end)
-
-    if err then
-        logger:log(err)
-    end
-
-    return frameCounter
-end
 
 -- The goal is to quickly extract all units to the DCS JTAC Hub for processing
-function exportWorldObjects()
+function DcsJtacTools:ExportUnits()
+    self.currentFrame = self.currentFrame + 1
+
+    if self.currentFrame % self.frameFrequency ~= 0 then
+        return
+    end
+
     local worldObjects = LoGetWorldObjects()
     local currentTime = LoGetModelTime()
-    local missionStartTime = LoGetMissionStartTime()
 
     for _, obj in pairs(worldObjects) do
-        -- We only care about active and non-static units
         if obj.Flags.Born and not obj.Flags.Static then
-            local jsonData = string.format([[{"unit_name":"%s","group_name":"%s","coalition":%d,"position":{"latitude":%f,"longitude":%f,"altitude":%f},"unit_type":{"level_1":"%s","level_2":"%s"},"mission_date":"%s","mission_start_time":%d,"mission_time_elapsed":%d}\n]],
+            local jsonData = string.format([[{"unit_name":"%s","group_name":"%s","coalition":%s,"position":{"latitude":%.5f,"longitude":%.5f,"altitude":%s,"heading":%.5f},"unit_type":{"level_1":"%s","level_2":"%s"},"mission_date":"%s","mission_start_time":%d,"mission_time_elapsed":%d}\n]],
             obj.Name,
             obj.GroupName,
-            obj.Coalition,
+            obj.CoalitionID,
             obj.LatLongAlt.Lat,
             obj.LatLongAlt.Long,
             obj.LatLongAlt.Alt,
+            obj.Heading,
             obj.Type.level1,
             obj.Type.level2,
-            string.format("%04d-%02d-%02dT%02d", MissionDate.Year, MissionDate.Month, MissionDate.Day),
-            missionStartTime,
+            string.format("%04d-%02d-%02d", MissionDate.Year, MissionDate.Month, MissionDate.Day),
+            self.missionStartTime,
             currentTime)
 
-        udp:send(jsonData)
+        self.socket.try(self.udp:sendto(jsonData, self.address, self.port))
         end
     end
 end
 
-function LuaExportStop()
-    udp:close()
-    logger:dispose()
+function DcsJtacTools:Dispose()
+    self:log('Shutting down DCS JTAC Tools')
+    self.socket.try(self.udp:close())
+    self.log_file:close();
+end
+
+function DcsJtacTools:log(message)
+    self.log_file:write(message .. '\n')
+end
+
+-----------------------------------------------------------
+--                  Export.lua Overrides
+-----------------------------------------------------------
+LuaExportStart = function()
+    local success, result = pcall(function() DcsJtacTools:Initialize() end)
+
+    if not success then
+        DcsJtacTools:log('ERROR LuaExportStart: ' .. result)
+    end
+end
+
+LuaExportBeforeNextFrame = function()
+    local success, result = pcall(function() DcsJtacTools:ExportUnits() end)
+
+    if not success then
+        DcsJtacTools:log('ERROR LuaExportBeforeNextFrame: ' .. result)
+    end
+end
+
+LuaExportStop = function()
+    local success, result = pcall(function() DcsJtacTools:Dispose() end)
+
+    if not success then
+        DcsJtacTools:log('ERROR LuaExportBeforeNextFrame: ' .. result)
+    end
 end
