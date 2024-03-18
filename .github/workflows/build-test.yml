@@ -16,9 +16,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Change directory to hub
-      run: cd hub
-    - name: Build
-      run: cargo build --verbose
+    - name: Build hub
+      run: cargo build --manifest-path hub/Cargo.toml --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --manifest-path hub/Cargo.toml --verbose
