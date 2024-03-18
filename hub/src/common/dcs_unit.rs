@@ -95,8 +95,6 @@ impl MissionTimeCalculator for DcsUnit {
 
 #[cfg(test)]
 mod unit_tests {
-    use std::mem::discriminant;
-
     use chrono::DateTime;
     use chrono::Utc;
 

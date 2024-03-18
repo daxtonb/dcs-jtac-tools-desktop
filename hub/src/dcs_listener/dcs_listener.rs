@@ -1,5 +1,5 @@
 use std::error::Error;
-use tokio::{net::UdpSocket, task::JoinHandle};
+use tokio::net::UdpSocket;
 
 use crate::common::dcs_unit::DcsUnit;
 
@@ -75,7 +75,6 @@ mod integration_tests {
 
     use std::time::Duration;
 
-    use futures_util::future::join_all;
     use tokio::{net::UdpSocket, time::timeout};
 
     use crate::common::{dcs_unit::{Coalition, DcsUnit, Position3D, UnitType}, unit_type::Level1UnitType};
@@ -122,7 +121,7 @@ mod integration_tests {
         };
 
         // Start the listener
-        let list_task = tokio::spawn(async move {
+        tokio::spawn(async move {
             listen(unit_handler)
                 .await
                 .expect("Unable to start listener")
