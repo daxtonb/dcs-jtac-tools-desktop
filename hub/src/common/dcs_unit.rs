@@ -44,7 +44,7 @@ pub struct Position3D {
     pub heading: f64,
 }
 
-/// Models the exported DCS unit
+/// Models the exported DCS unit. See scripts\dcs_jtac_tools_unit_export.lua
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct DcsUnit {
     /// The unit's identifier

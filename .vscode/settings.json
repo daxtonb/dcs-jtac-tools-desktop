@@ -6,6 +6,7 @@
         "lua"
     ],
     "rust-analyzer.linkedProjects": [
-        "./hub/Cargo.toml"
+        "./hub/Cargo.toml",
+        ".\\hub\\Cargo.toml"
     ]
 }

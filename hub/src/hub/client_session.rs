@@ -1,5 +1,6 @@
 use super::{ClientRead, ClientWrite, ClientsByIdRead, ClientsByIdWrite};
 
+/// Encapsulates client data needed for starting and ending sessions.
 pub struct ClientSession {
     pub client_id: u32,
     clients_by_id_read: ClientsByIdRead,
@@ -9,6 +10,7 @@ pub struct ClientSession {
 }
 
 impl ClientSession {
+    /// Creates a new instance of `ClientSession` and adds it to the `ClientRead` and `ClientWrite` hash tables.
     pub async fn new(
         client_id: u32,
         clients_by_id_read: ClientsByIdRead,

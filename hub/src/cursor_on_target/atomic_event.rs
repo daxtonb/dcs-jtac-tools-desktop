@@ -31,6 +31,7 @@ impl AtomicEvent {
     }
 }
 
+/// Handle conversion from DCS coalitions
 fn coalition_to_atomic_event_char(coalition: &Coalition) -> char {
     match coalition {
         Coalition::NEUTRAL => 'f',
@@ -39,6 +40,7 @@ fn coalition_to_atomic_event_char(coalition: &Coalition) -> char {
     }
 }
 
+/// Handle conversion from DCS level 1 unit type
 fn level_1_unit_type_char(unit_type: &Level1UnitType) -> char {
     match unit_type {
         Level1UnitType::AIR => 'A',
@@ -51,7 +53,7 @@ fn level_1_unit_type_char(unit_type: &Level1UnitType) -> char {
 mod unit_tests {
     use crate::{
         common::{dcs_unit::{Coalition, DcsUnit, Position3D, UnitType}, unit_type::Level1UnitType},
-        transmitter::atomic_event::{coalition_to_atomic_event_char, level_1_unit_type_char},
+        cursor_on_target::atomic_event::{coalition_to_atomic_event_char, level_1_unit_type_char},
     };
 
     use super::AtomicEvent;
