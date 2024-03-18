@@ -2,20 +2,7 @@ use chrono::{DateTime, ParseError, Utc};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-/// The top-level DCS unit types
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
-pub enum Level1UnitType {
-    AIR = 'A' as isize,
-    GROUND = 'G' as isize,
-    SEA = 'S' as isize,
-}
-
-/// The detailed aircraft unit type
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
-pub enum AirLevel2UnitType {
-    FIXED_WING = 'F' as isize,
-    ROTARY_WING = 'H' as isize,
-}
+use super::unit_type::Level1UnitType;
 
 /// The DCS coalition
 #[derive(Debug, Deserialize_repr, Serialize_repr, PartialEq)]
@@ -35,10 +22,10 @@ pub enum Coalition {
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct UnitType {
     /// Top-level categorization of unit
-    pub level_1: char,
+    pub level_1: Level1UnitType,
 
     /// The sub-categorization of unit
-    pub level_2: char,
+    pub level_2: u8,
 }
 
 /// 3-dimensional position of the unit
@@ -52,6 +39,9 @@ pub struct Position3D {
 
     /// Elevation of the unit
     pub altitude: f32,
+
+    /// The heading of the unit (in radians)
+    pub heading: f64,
 }
 
 /// Models the exported DCS unit
@@ -73,7 +63,7 @@ pub struct DcsUnit {
     pub unit_type: UnitType,
 
     /// The date of the mission
-    pub date: String,
+    pub mission_date: String,
 
     /// The start time of the mission
     pub mission_start_time: i32,
@@ -95,25 +85,28 @@ impl MissionTimeCalculator for DcsUnit {
         let minute = (current_time_sec % 3600) / 60;
         let second = current_time_sec % 60;
 
-        format!("{}T{:02}:{:02}:{:02}Z", self.date, hour, minute, second).parse::<DateTime<Utc>>()
+        format!(
+            "{}T{:02}:{:02}:{:02}Z",
+            self.mission_date, hour, minute, second
+        )
+        .parse::<DateTime<Utc>>()
     }
 }
 
 #[cfg(test)]
 mod unit_tests {
-    use std::mem::discriminant;
-
     use chrono::DateTime;
     use chrono::Utc;
 
     use crate::common::dcs_unit::{DcsUnit, MissionTimeCalculator};
+    use crate::common::unit_type::Level1UnitType;
 
     use super::{Coalition, Position3D, UnitType};
 
     #[test]
     fn given_json_string_when_deserialized_then_deserialization_succeeds() {
         // Arrange
-        let json = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67},"unit_type":{"level_1":"A","level_2":"B","level_3":"C","level_4":null},"date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
+        let json = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67,"heading":2.0034},"unit_type":{"level_1":1,"level_2":1},"mission_date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
         let expected = build_dcs_unit();
 
         // Act
@@ -126,7 +119,7 @@ mod unit_tests {
     #[test]
     fn given_json_string_when_serialized_then_json_string_serialization_succeeds() {
         // Arrange
-        let expected = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67},"unit_type":{"level_1":"A","level_2":"B"},"date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
+        let expected = r#"{"unit_name":"UNIT-1","group_name":"GROUP-1","coalition":2,"position":{"latitude":30.0090027,"longitude":-85.9578735,"altitude":132.67,"heading":2.0034},"unit_type":{"level_1":1,"level_2":1},"mission_date":"2024-03-08","mission_start_time":28800,"mission_time_elapsed":3600}"#;
         let dcs_unit = build_dcs_unit();
 
         // Act
@@ -155,7 +148,7 @@ mod unit_tests {
     fn given_malformed_date_info_when_deserialized_then_returns_error() {
         // Arrange
         let mut dcs_unit = build_dcs_unit();
-        dcs_unit.date = "2023-13-08".to_string();
+        dcs_unit.mission_date = "2023-13-08".to_string();
 
         // Act
         let result = dcs_unit.calculate_mission_time();
@@ -176,12 +169,13 @@ mod unit_tests {
                 latitude: 30.0090027,
                 longitude: -85.9578735,
                 altitude: 132.67,
+                heading: 2.0034,
             },
             unit_type: UnitType {
-                level_1: 'A',
-                level_2: 'B',
+                level_1: Level1UnitType::AIR,
+                level_2: 1,
             },
-            date: "2024-03-08".to_string(),
+            mission_date: "2024-03-08".to_string(),
             mission_start_time: 28800,
             mission_time_elapsed: 3600,
         }

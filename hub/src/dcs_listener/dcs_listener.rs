@@ -1,5 +1,5 @@
 use std::error::Error;
-use tokio::{net::UdpSocket, task::JoinHandle};
+use tokio::net::UdpSocket;
 
 use crate::common::dcs_unit::DcsUnit;
 
@@ -21,23 +21,23 @@ where
     Ok(())
 }
 
-async fn start_receiving_loop<F>(socket: UdpSocket, unit_handler: F) -> JoinHandle<()>
+async fn start_receiving_loop<F>(socket: UdpSocket, unit_handler: F)
 where
     F: Fn(DcsUnit) + Send + Sync + 'static,
 {
     let buffer = [0u8; DCS_LISTENER_BUFFER_SIZE];
 
-    tokio::spawn(async move {
-        loop {
-            match receive_next(&socket, buffer).await {
-                Ok(unit) => unit_handler(unit),
-                Err(e) => {
-                    println!("Error receiving message: {}", e);
-                    break;
-                }
+    println!("Waiting for data...");
+
+    loop {
+        match receive_next(&socket, buffer).await {
+            Ok(unit) => unit_handler(unit),
+            Err(e) => {
+                println!("Error receiving message: {}", e);
+                break;
             }
         }
-    })
+    }
 }
 
 async fn setup_socket() -> Result<UdpSocket, Box<dyn Error>> {
@@ -73,9 +73,11 @@ async fn receive_next(
 #[cfg(test)]
 mod integration_tests {
 
-    use tokio::net::UdpSocket;
+    use std::time::Duration;
 
-    use crate::common::dcs_unit::{Coalition, DcsUnit, Position3D, UnitType};
+    use tokio::{net::UdpSocket, time::timeout};
+
+    use crate::common::{dcs_unit::{Coalition, DcsUnit, Position3D, UnitType}, unit_type::Level1UnitType};
 
     use super::{listen, DCS_LISTENER_PORT, DCS_MSG_DELIMITER};
 
@@ -92,12 +94,13 @@ mod integration_tests {
                     latitude: 30.0090027 + (i as f64),
                     longitude: -85.9578735 + (i as f64),
                     altitude: 132.67 + (i as f32),
+                    heading: 0.0568 + (i as f64),
                 },
                 unit_type: UnitType {
-                    level_1: 'A',
-                    level_2: 'B',
+                    level_1: Level1UnitType::AIR,
+                    level_2: 1,
                 },
-                date: "2024-03-08".to_string(),
+                mission_date: "2024-03-08".to_string(),
                 mission_start_time: 28800,
                 mission_time_elapsed: 3600,
             });
@@ -118,7 +121,7 @@ mod integration_tests {
         };
 
         // Start the listener
-        let list_task = tokio::spawn(async move {
+        tokio::spawn(async move {
             listen(unit_handler)
                 .await
                 .expect("Unable to start listener")
@@ -146,7 +149,7 @@ mod integration_tests {
 
         // Check if all units were received
         let mut units_count = 0;
-        while let Some(unit) = rx.recv().await {
+        while let Ok(Some(unit)) = timeout(Duration::from_secs(5), rx.recv()).await {
             assert!(units.contains(&unit));
             units_count += 1;
 
@@ -156,7 +159,5 @@ mod integration_tests {
         }
 
         assert_eq!(units_count, units.len());
-
-        list_task.await.unwrap();
     }
 }

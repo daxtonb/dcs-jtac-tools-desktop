@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::common::dcs_unit::{Coalition, DcsUnit};
+use crate::common::{dcs_unit::{Coalition, DcsUnit}, unit_type::Level1UnitType};
 
 /// Models a four-level hierarchy used for constructing atomic events. Consider making the number
 /// of levels more dynamic (i.e. linked list).
@@ -9,15 +9,14 @@ pub struct AtomicEvent {
     level_1: char,
     level_2: char,
     level_3: char,
-    level_4: char,
 }
 
 impl fmt::Display for AtomicEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}-{}-{}-{}",
-            self.level_1, self.level_2, self.level_3, self.level_4
+            "{}-{}-{}",
+            self.level_1, self.level_2, self.level_3
         )
     }
 }
@@ -27,8 +26,7 @@ impl AtomicEvent {
         AtomicEvent {
             level_1: 'a',
             level_2: coalition_to_atomic_event_char(&unit.coalition),
-            level_3: unit.unit_type.level_1,
-            level_4: unit.unit_type.level_2,
+            level_3: level_1_unit_type_char(&unit.unit_type.level_1),
         }
     }
 }
@@ -41,11 +39,19 @@ fn coalition_to_atomic_event_char(coalition: &Coalition) -> char {
     }
 }
 
+fn level_1_unit_type_char(unit_type: &Level1UnitType) -> char {
+    match unit_type {
+        Level1UnitType::AIR => 'A',
+        Level1UnitType::GROUND => 'G',
+        Level1UnitType::SEA => 'S',
+    }
+}
+
 #[cfg(test)]
 mod unit_tests {
     use crate::{
-        common::dcs_unit::{Coalition, DcsUnit, Position3D, UnitType},
-        transmitter::atomic_event::coalition_to_atomic_event_char,
+        common::{dcs_unit::{Coalition, DcsUnit, Position3D, UnitType}, unit_type::Level1UnitType},
+        transmitter::atomic_event::{coalition_to_atomic_event_char, level_1_unit_type_char},
     };
 
     use super::AtomicEvent;
@@ -61,12 +67,13 @@ mod unit_tests {
                 latitude: 30.0090027,
                 longitude: -85.9578735,
                 altitude: -42.6,
+                heading: 0.0568,
             },
             unit_type: UnitType {
-                level_1: 'A',
-                level_2: 'M',
+                level_1: Level1UnitType::AIR,
+                level_2: 1,
             },
-            date: "2005-04-05".to_string(),
+            mission_date: "2005-04-05".to_string(),
             mission_start_time: 42_000,
             mission_time_elapsed: 218,
         };
@@ -75,7 +82,6 @@ mod unit_tests {
             level_1: 'a',
             level_2: 'h',
             level_3: 'A',
-            level_4: 'M',
         };
 
         // Act
@@ -92,18 +98,17 @@ mod unit_tests {
             level_1: 'a',
             level_2: 'h',
             level_3: 'A',
-            level_4: 'M',
         };
 
         // Act
         let result = event.to_string();
 
         // Assert
-        assert_eq!("a-h-A-M", result);
+        assert_eq!("a-h-A", result);
     }
 
     #[test]
-    fn given_neutral_unit_when_building_unit_type_then_atom_string_generated() {
+    fn given_neutral_unit_when_building_unit_type_then_f_returned() {
         // Arrange
         let coalition = Coalition::NEUTRAL;
 
@@ -115,7 +120,7 @@ mod unit_tests {
     }
 
     #[test]
-    fn given_redfor_unit_when_building_unit_type_then_atom_string_generated() {
+    fn given_redfor_unit_when_building_unit_type_then_h_returned() {
         // Arrange
         let coalition = Coalition::REDFOR;
 
@@ -127,7 +132,7 @@ mod unit_tests {
     }
 
     #[test]
-    fn given_blufor_unit_when_building_unit_type_then_atom_string_generated() {
+    fn given_blufor_unit_when_building_unit_type_then_n_returned() {
         // Arrange
         let coalition = Coalition::BLUFOR;
 
@@ -136,5 +141,41 @@ mod unit_tests {
 
         // Assert
         assert_eq!('n', result);
+    }
+
+    #[test]
+    fn given_ground_unit_when_building_unit_type_then_g_returned() {
+        // Arrange
+        let unit_type = Level1UnitType::GROUND;
+
+        // Act
+        let result = level_1_unit_type_char(&unit_type);
+
+        // Assert
+        assert_eq!('G', result);
+    }
+
+    #[test]
+    fn given_sea_unit_when_building_unit_type_then_s_returned() {
+        // Arrange
+        let unit_type = Level1UnitType::SEA;
+
+        // Act
+        let result = level_1_unit_type_char(&unit_type);
+
+        // Assert
+        assert_eq!('S', result);
+    }
+
+    #[test]
+    fn given_air_unit_when_building_unit_type_then_a_returned() {
+        // Arrange
+        let unit_type = Level1UnitType::AIR;
+
+        // Act
+        let result = level_1_unit_type_char(&unit_type);
+
+        // Assert
+        assert_eq!('A', result);
     }
 }
