@@ -33,8 +33,7 @@ where
         match receive_next(&socket, buffer).await {
             Ok(unit) => unit_handler(unit),
             Err(e) => {
-                println!("Error receiving message: {}", e);
-                break;
+                eprintln!("Error receiving message: {}", e);
             }
         }
     }

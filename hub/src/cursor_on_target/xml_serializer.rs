@@ -66,7 +66,7 @@ mod unit_tests {
             mission_start_time: 42_000,
             mission_time_elapsed: 218,
         };
-        let expected = r#"<?xml version="1.0" standalone="yes"?><event version="2.0" uid="J-01334" type="a-h-A" time="2005-04-05T11:43:38Z" start="2005-04-05T11:43:38Z" stale="2005-04-05T11:44:38Z"><point lat="30.0090027" lon="-85.9578735" ce="0.0" hae="-42.6" le="0.0"/><detail><contact callsign="J-01334"/></detail></event>"#;
+        let expected = r#"<?xml version="1.0" standalone="yes"?><event version="2.0" uid="J-01334" type="a-h-A" how="m-g" time="2005-04-05T11:43:38Z" start="2005-04-05T11:43:38Z" stale="2005-04-05T11:44:38Z"><point lat="30.0090027" lon="-85.9578735" ce="0.0" hae="-42.6" le="0.0"/><detail><contact callsign="J-01334"/></detail></event>"#;
 
         // Act
         let result =

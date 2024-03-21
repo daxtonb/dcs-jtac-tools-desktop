@@ -70,7 +70,7 @@ struct Event {
 impl ToXml for Event {
     fn to_xml(&self) -> String {
         format!(
-            r#"<?xml version="1.0" standalone="yes"?><event version="2.0" uid="{}" type="{}" time="{}" start="{}" stale="{}">{}{}</event>"#,
+            r#"<?xml version="1.0" standalone="yes"?><event version="2.0" uid="{}" type="{}" how="m-g" time="{}" start="{}" stale="{}">{}{}</event>"#,
             self.uid,
             self.unit_type,
             self.time,
