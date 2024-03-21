@@ -43,9 +43,10 @@ impl WebSocketHub {
 
     /// Initiates listening for subscribers.
     pub async fn start(&self) -> Result<(), Error> {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port)).await?;
+        let listener = TcpListener::bind(format!("0.0.0.0:{}", self.port)).await?;
 
         while let Ok((stream, _)) = listener.accept().await {
+            println!("Attempting to connect client...");
             let ws_stream = match accept_async(stream).await {
                 Ok(stream) => stream,
                 Err(e) => {
@@ -87,6 +88,8 @@ impl WebSocketHub {
 
     async fn start_client_listen_task(client_session: ClientSession) {
         tokio::spawn(async move {
+
+            println!("Successfully connected client {}", client_session.client_id);
             // Here we're just looping to detect disconnection.
             while let Some(result) = client_session.client_read.lock().await.next().await {
                 match result {
