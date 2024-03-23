@@ -102,7 +102,7 @@ function DcsJtacTools:ExportUnits()
     local currentTime = LoGetModelTime()
 
     for _, obj in pairs(worldObjects) do
-        if obj.Flags.Born and not obj.Flags.Static then
+        if obj.UnitName and obj.Flags.Born and not obj.Flags.Static then
             local jsonData = string.format([[{"unit_name":"%s","group_name":"%s","coalition":%s,"position":{"latitude":%.5f,"longitude":%.5f,"altitude":%s,"heading":%.5f},"unit_type":{"level_1":%d,"level_2":%d},"mission_date":"%s","mission_start_time":%d,"mission_time_elapsed":%d}]] .. "\n",
             obj.UnitName,
             obj.GroupName,
