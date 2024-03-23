@@ -34,9 +34,9 @@ impl AtomicEvent {
 /// Handle conversion from DCS coalitions
 fn coalition_to_atomic_event_char(coalition: &Coalition) -> char {
     match coalition {
-        Coalition::NEUTRAL => 'f',
+        Coalition::NEUTRAL => 'n',
         Coalition::REDFOR => 'h',
-        Coalition::BLUFOR => 'n',
+        Coalition::BLUFOR => 'f',
     }
 }
 
@@ -110,7 +110,7 @@ mod unit_tests {
     }
 
     #[test]
-    fn given_neutral_unit_when_building_unit_type_then_f_returned() {
+    fn given_neutral_unit_when_building_unit_type_then_n_returned() {
         // Arrange
         let coalition = Coalition::NEUTRAL;
 
@@ -118,7 +118,7 @@ mod unit_tests {
         let result = coalition_to_atomic_event_char(&coalition);
 
         // Assert
-        assert_eq!('f', result);
+        assert_eq!('n', result);
     }
 
     #[test]
@@ -134,7 +134,7 @@ mod unit_tests {
     }
 
     #[test]
-    fn given_blufor_unit_when_building_unit_type_then_n_returned() {
+    fn given_blufor_unit_when_building_unit_type_then_f_returned() {
         // Arrange
         let coalition = Coalition::BLUFOR;
 
@@ -142,7 +142,7 @@ mod unit_tests {
         let result = coalition_to_atomic_event_char(&coalition);
 
         // Assert
-        assert_eq!('n', result);
+        assert_eq!('f', result);
     }
 
     #[test]

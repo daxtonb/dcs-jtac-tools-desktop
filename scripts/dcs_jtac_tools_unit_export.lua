@@ -11,7 +11,7 @@ package.cpath = package.cpath .. ";.\\LuaSocket\\?.dll"
 local DcsJtacTools = {}
 
 function DcsJtacTools:Initialize()
-    self.frameFrequency = 10
+    self.frameFrequency = 100
     self.address = "127.0.0.1"
     self.port = "34254"
 
