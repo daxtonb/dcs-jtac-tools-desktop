@@ -1,6 +1,7 @@
 {
     "Lua.diagnostics.globals": [
-        "LoGetWorldObjects"
+        "LoGetWorldObjects",
+        "LoGetMissionStartTime"
     ],
     "cSpell.enableFiletypes": [
         "lua"

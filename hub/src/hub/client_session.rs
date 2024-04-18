@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::{ClientRead, ClientWrite, ClientsByIdRead, ClientsByIdWrite};
 
 /// Encapsulates client data needed for starting and ending sessions.
@@ -7,6 +9,7 @@ pub struct ClientSession {
     clients_by_id_write: ClientsByIdWrite,
     pub client_read: ClientRead,
     pub client_write: ClientWrite,
+    subscribed_topics: HashSet<String>,
 }
 
 impl ClientSession {
@@ -37,7 +40,18 @@ impl ClientSession {
             clients_by_id_write,
             client_read,
             client_write,
+            subscribed_topics: HashSet::new(),
         }
+    }
+
+    /// Subscribes a client to a topic
+    pub fn subscribe_topic(&mut self, topic: String) {
+        self.subscribed_topics.insert(topic);
+    }
+
+    /// Checks whether a client is subscribed to a topic
+    pub fn is_subscribed(&self, topic: &String) -> bool {
+        self.subscribed_topics.contains(topic)
     }
 }
 
