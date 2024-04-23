@@ -15,6 +15,8 @@ mod hub;
 mod udp_listener;
 mod user_config;
 
+const UNITS_TOPIC: &str = "UNITS";
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let user_config = load_config().unwrap();
@@ -29,7 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         match XmlSerializer::serialize_dcs_unit(&unit) {
             Ok(xml) => {
-                hub_clone.broadcast_message(xml);
+                hub_clone.broadcast_message(UNITS_TOPIC.to_string(), xml);
             }
             Err(err) => eprintln!("Failed to serialize DCS unit: {:?}", err),
         }

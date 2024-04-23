@@ -1,76 +1,93 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
-use super::{ClientRead, ClientWrite, ClientsByIdRead, ClientsByIdWrite};
+use futures_util::{SinkExt, StreamExt};
+use tokio::sync::{mpsc::Receiver, Mutex};
+use tokio_tungstenite::tungstenite::{self, Message};
+
+use super::{ClientRead, ClientWrite};
 
 /// Encapsulates client data needed for starting and ending sessions.
 pub struct ClientSession {
     pub client_id: u32,
-    clients_by_id_read: ClientsByIdRead,
-    clients_by_id_write: ClientsByIdWrite,
     pub client_read: ClientRead,
     pub client_write: ClientWrite,
-    subscribed_topics: HashSet<String>,
+    host_read: Arc<Mutex<Receiver<String>>>,
+    subscribed_topics: Arc<Mutex<HashSet<String>>>,
 }
 
 impl ClientSession {
     /// Creates a new instance of `ClientSession` and adds it to the `ClientRead` and `ClientWrite` hash tables.
-    pub async fn new(
+    pub fn new(
         client_id: u32,
-        clients_by_id_read: ClientsByIdRead,
-        clients_by_id_write: ClientsByIdWrite,
         client_read: ClientRead,
         client_write: ClientWrite,
+        host_read: Arc<Mutex<Receiver<String>>>,
     ) -> Self {
-        {
-            clients_by_id_read
-                .lock()
-                .await
-                .insert(client_id, client_read.clone());
-        }
-        {
-            clients_by_id_write
-                .lock()
-                .await
-                .insert(client_id, client_write.clone());
-        }
+        println!("Client {} connected", client_id);
 
-        Self {
+        let session = Self {
             client_id,
-            clients_by_id_read,
-            clients_by_id_write,
             client_read,
             client_write,
-            subscribed_topics: HashSet::new(),
+            host_read,
+            subscribed_topics: Arc::new(Mutex::new(HashSet::new())),
+        };
+
+        session
+    }
+
+    pub async fn list_to_client(&self) {
+        while let Some(result) = self.client_read.lock().await.next().await {
+            match result {
+                Ok(message) => {
+                    if let Message::Text(text) = message {
+                        if let Some((topic, body)) = text.split_once("//") {
+                            if topic.to_string() == "SUBSCRIBE" {
+                                let body = body.to_string();
+                                self.subscribe_topic(body).await;
+                            }
+                        }
+                    }
+                }
+                Err(err) => eprintln!("Failed to receive message from client: {:?}", err),
+            }
         }
     }
 
-    /// Subscribes a client to a topic
-    pub fn subscribe_topic(&mut self, topic: String) {
-        self.subscribed_topics.insert(topic);
+    pub async fn listen_to_host(&self) {
+        while let Some(message) = self.host_read.lock().await.recv().await {
+            println!("Sending message to client {}: {}", self.client_id, message);
+            if let Some((topic, body)) = message.split_once("//") {
+                if self.is_subscribed(&topic.to_string()).await {
+                    if let Err(err) = self
+                        .client_write
+                        .lock()
+                        .await
+                        .send(Message::text(body))
+                        .await
+                    {
+                        eprintln!(
+                            "Client {} failed to send message from host: {:?}",
+                            self.client_id, err
+                        );
+                    }
+                }
+            }
+        }
     }
 
-    /// Checks whether a client is subscribed to a topic
-    pub fn is_subscribed(&self, topic: &String) -> bool {
-        self.subscribed_topics.contains(topic)
+    async fn subscribe_topic(&self, topic: String) {
+        println!("Client {} subscribed to {}", self.client_id, topic);
+        self.subscribed_topics.lock().await.insert(topic);
+    }
+
+    async fn is_subscribed(&self, topic: &String) -> bool {
+        self.subscribed_topics.lock().await.contains(topic)
     }
 }
 
 impl Drop for ClientSession {
     fn drop(&mut self) {
-        let client_id = self.client_id;
-        let clients_by_id_read = self.clients_by_id_read.clone();
-        let clients_by_id_write = self.clients_by_id_write.clone();
-
-        tokio::spawn(async move {
-            {
-                let mut clients = clients_by_id_read.lock().await;
-                clients.remove(&client_id);
-            }
-            {
-                let mut clients = clients_by_id_write.lock().await;
-                clients.remove(&client_id);
-            }
-            println!("Client {} disconnected", client_id);
-        });
+        println!("Client {} disconnected", self.client_id);
     }
 }
