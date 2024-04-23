@@ -2,7 +2,7 @@ use std::{collections::HashSet, sync::Arc};
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc::Receiver, Mutex};
-use tokio_tungstenite::tungstenite::{self, Message};
+use tokio_tungstenite::tungstenite::Message;
 
 use super::{ClientRead, ClientWrite};
 
