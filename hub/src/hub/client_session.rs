@@ -59,7 +59,7 @@ impl ClientSession {
         match message {
             Message::Text(text) => match text.split_once(MESSAGE_TOPIC_DELIMITER) {
                 Some((topic, body)) => {
-                    if topic.to_string() == "SUBSCRIBE" {
+                    if topic == "SUBSCRIBE" {
                         let body = body.to_string();
                         self.subscribe_topic(body).await;
                     }
