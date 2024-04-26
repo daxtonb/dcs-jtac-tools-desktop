@@ -38,43 +38,56 @@ impl ClientSession {
         session
     }
 
+    /// Initiates listening for messages from the client
     pub async fn listen_to_client(&self) {
         while let Some(result) = self.client_read.lock().await.next().await {
             match result {
-                Ok(message) => {
-                    if let Message::Text(text) = message {
-                        if let Some((topic, body)) = text.split_once(MESSAGE_TOPIC_DELIMITER) {
-                            if topic.to_string() == "SUBSCRIBE" {
-                                let body = body.to_string();
-                                self.subscribe_topic(body).await;
-                            }
-                        }
-                    }
-                }
+                Ok(message) => self.handle_message_from_client(message).await,
                 Err(err) => eprintln!("Failed to receive message from client: {:?}", err),
             }
         }
     }
 
+    /// Initiates listening for messages from the host
     pub async fn listen_to_host(&self) {
         while let Some(message) = self.host_read.lock().await.recv().await {
-            println!("Sending message to client {}: {}", self.client_id, message);
-            if let Some((topic, body)) = message.split_once(MESSAGE_TOPIC_DELIMITER) {
-                if self.is_subscribed(&topic.to_string()).await {
-                    if let Err(err) = self
-                        .client_write
-                        .lock()
-                        .await
-                        .send(Message::text(body))
-                        .await
-                    {
-                        eprintln!(
-                            "Client {} failed to send message from host: {:?}",
-                            self.client_id, err
-                        );
+            self.handle_message_from_host(message).await;
+        }
+    }
+
+    async fn handle_message_from_client(&self, message: Message) {
+        match message {
+            Message::Text(text) => match text.split_once(MESSAGE_TOPIC_DELIMITER) {
+                Some((topic, body)) => {
+                    if topic.to_string() == "SUBSCRIBE" {
+                        let body = body.to_string();
+                        self.subscribe_topic(body).await;
                     }
                 }
+                None => eprintln!(
+                    "Message from client {} does not have the expected delimiter: {}",
+                    self.client_id, MESSAGE_TOPIC_DELIMITER
+                ),
+            },
+            _ => eprintln!(
+                "Message from client {} was not in the expected text format",
+                self.client_id
+            ),
+        }
+    }
+
+    async fn handle_message_from_host(&self, message: String) {
+        println!("Sending message to client {}: {}", self.client_id, message);
+        match message.split_once(MESSAGE_TOPIC_DELIMITER) {
+            Some((topic, body)) => {
+                if self.is_subscribed(&topic.to_string()).await {
+                    self.send_host_message_to_client(body).await;
+                }
             }
+            None => eprintln!(
+                "Message from host to client {} does not have the expected delimiter: {}",
+                self.client_id, MESSAGE_TOPIC_DELIMITER
+            ),
         }
     }
 
@@ -85,6 +98,21 @@ impl ClientSession {
 
     async fn is_subscribed(&self, topic: &String) -> bool {
         self.subscribed_topics.lock().await.contains(topic)
+    }
+
+    async fn send_host_message_to_client(&self, message: &str) {
+        if let Err(err) = self
+            .client_write
+            .lock()
+            .await
+            .send(Message::text(message))
+            .await
+        {
+            eprintln!(
+                "Client {} failed to send message from host: {:?}",
+                self.client_id, err
+            );
+        }
     }
 }
 
