@@ -4,6 +4,8 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc::Receiver, Mutex};
 use tokio_tungstenite::tungstenite::Message;
 
+use crate::common::messaging::MESSAGE_TOPIC_DELIMITER;
+
 use super::{ClientRead, ClientWrite};
 
 /// Encapsulates client data needed for starting and ending sessions.
@@ -36,12 +38,12 @@ impl ClientSession {
         session
     }
 
-    pub async fn list_to_client(&self) {
+    pub async fn listen_to_client(&self) {
         while let Some(result) = self.client_read.lock().await.next().await {
             match result {
                 Ok(message) => {
                     if let Message::Text(text) = message {
-                        if let Some((topic, body)) = text.split_once("//") {
+                        if let Some((topic, body)) = text.split_once(MESSAGE_TOPIC_DELIMITER) {
                             if topic.to_string() == "SUBSCRIBE" {
                                 let body = body.to_string();
                                 self.subscribe_topic(body).await;
@@ -57,7 +59,7 @@ impl ClientSession {
     pub async fn listen_to_host(&self) {
         while let Some(message) = self.host_read.lock().await.recv().await {
             println!("Sending message to client {}: {}", self.client_id, message);
-            if let Some((topic, body)) = message.split_once("//") {
+            if let Some((topic, body)) = message.split_once(MESSAGE_TOPIC_DELIMITER) {
                 if self.is_subscribed(&topic.to_string()).await {
                     if let Err(err) = self
                         .client_write

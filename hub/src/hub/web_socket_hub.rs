@@ -6,13 +6,12 @@ use std::sync::{
 use futures_util::{lock::Mutex, stream, StreamExt};
 use tokio::{
     net::TcpListener,
+    sync,
     sync::mpsc::{self, channel, Receiver, Sender},
-    sync
 };
-use tokio_tungstenite::{
-    accept_async,
-    tungstenite::Error,
-};
+use tokio_tungstenite::{accept_async, tungstenite::Error};
+
+use crate::common::messaging::MESSAGE_TOPIC_DELIMITER;
 
 use super::client_session::ClientSession;
 
@@ -79,8 +78,14 @@ impl WebSocketHub {
     pub fn broadcast_message(&self, topic: String, message: String) {
         let message_sender = self.message_sender.clone();
         tokio::spawn(async move {
-            println!("Received topic/message from host: {}//{}", topic, message);
-            match message_sender.send(format!("{}//{}", topic, message)).await {
+            println!(
+                "Received topic/message from host: {}{}{}",
+                topic, MESSAGE_TOPIC_DELIMITER, message
+            );
+            match message_sender
+                .send(format!("{}{}{}", topic, MESSAGE_TOPIC_DELIMITER, message))
+                .await
+            {
                 Ok(_) => println!("Message sent to clients: {}", message),
                 Err(err) => eprintln!("Failed to send message to clients: {}", err),
             }
@@ -89,7 +94,7 @@ impl WebSocketHub {
 
     async fn start_client_listen_task(client_session: Arc<ClientSession>) {
         tokio::spawn(async move {
-            client_session.list_to_client().await;
+            client_session.listen_to_client().await;
         });
     }
 
@@ -121,6 +126,8 @@ impl WebSocketHub {
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::common::messaging::MESSAGE_TOPIC_DELIMITER;
+
     use super::*;
     use futures_util::sink::SinkExt;
     use futures_util::stream::StreamExt;
@@ -143,13 +150,13 @@ mod integration_tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Connect a client to the WebSocketHub.
-        let url = format!("ws://127.0.0.1:{}", port);
+        let url = format!("ws:{}127.0.0.1:{}", MESSAGE_TOPIC_DELIMITER, port);
         let (mut ws_stream, _) = connect_async(url)
             .await
             .expect("Failed to connect to WebSocketHub");
 
         // Subscribe the client to a topic
-        let test_message = format!("SUBSCRIBE//{}", topic);
+        let test_message = format!("SUBSCRIBE{}{}", MESSAGE_TOPIC_DELIMITER, topic);
         ws_stream
             .send(Message::Text(test_message.to_string()))
             .await
