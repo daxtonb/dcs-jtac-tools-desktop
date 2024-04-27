@@ -124,19 +124,23 @@ impl WebSocketHub {
         let clients = self.client_senders.clone();
         tokio::spawn(async move {
             while let Some(message) = message_receiver.recv().await {
-                let clients = clients.lock().await;
-                stream::iter(clients.iter())
-                    .for_each(|client| {
-                        let message = message.clone();
-                        async move {
-                            if let Err(err) = client.send(message).await {
-                                eprint!("Failed to send message to client: {:?}", err);
-                            };
-                        }
-                    })
-                    .await;
+                Self::send_message_to_clients(&clients, message).await;
             }
         });
+    }
+
+    async fn send_message_to_clients(clients: &Arc<Mutex<Vec<Sender<String>>>>, message: String) {
+        let clients = clients.lock().await;
+        stream::iter(clients.iter())
+            .for_each(|client| {
+                let message = message.clone();
+                async move {
+                    if let Err(err) = client.send(message).await {
+                        eprint!("Failed to send message to client: {:?}", err);
+                    };
+                }
+            })
+            .await;
     }
 }
 
