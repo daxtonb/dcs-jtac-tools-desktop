@@ -152,8 +152,7 @@ mod integration_tests {
     use futures_util::sink::SinkExt;
     use futures_util::stream::StreamExt;
     use std::{
-        clone,
-        sync::{atomic::AtomicBool, Mutex},
+        sync::Mutex,
         time::Duration,
     };
     use tokio::time::timeout;
@@ -259,6 +258,8 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_client_message_handling() {
+        let topic = "SOME_TOPIC";
+        let message = "Hello, host!";
         let handler_calls = Arc::new(Mutex::new(Vec::new()));
         let calls = handler_calls.clone();
         let client_message_handler = move |_, topic: &str, body: &str| {
@@ -289,8 +290,8 @@ mod integration_tests {
 
         if let Err(err) = ws_stream
             .send(Message::Text(format!(
-                "SOME_TOPIC{}Hello, host!",
-                MESSAGE_TOPIC_DELIMITER
+                "{}{}{}",
+                topic, MESSAGE_TOPIC_DELIMITER, message
             )))
             .await
         {
@@ -302,7 +303,7 @@ mod integration_tests {
 
         let final_calls = handler_calls.lock().unwrap();
         assert_eq!(final_calls.len(), 1);
-        assert_eq!(final_calls[0].0, "SOME_TOPIC");
-        assert_eq!(final_calls[0].1, "Hello, host!");
+        assert_eq!(final_calls[0].0, topic);
+        assert_eq!(final_calls[0].1, message);
     }
 }
