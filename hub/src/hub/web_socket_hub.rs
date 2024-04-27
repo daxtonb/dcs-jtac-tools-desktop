@@ -67,13 +67,13 @@ impl WebSocketHub {
             let client_write = Arc::new(Mutex::new(write_half));
 
             let self_clone = self.clone();
-            let client_message_handler: Option<ClientMessageHandlerFn> = match self.client_message_handler.clone() {
-                Some(handler) => Some(Arc::new(move |topic: &str, body: &str| {
-                    (handler)(self_clone.clone(), topic, body)
-                })),
-                None => None,
-            };
-            
+            let client_message_handler: Option<ClientMessageHandlerFn> =
+                match self.client_message_handler.clone() {
+                    Some(handler) => Some(Arc::new(move |topic: &str, body: &str| {
+                        (handler)(self_clone.clone(), topic, body)
+                    })),
+                    None => None,
+                };
 
             let client_session = Arc::new(ClientSession::new(
                 client_id,
@@ -151,7 +151,11 @@ mod integration_tests {
     use super::*;
     use futures_util::sink::SinkExt;
     use futures_util::stream::StreamExt;
-    use std::time::Duration;
+    use std::{
+        clone,
+        sync::{atomic::AtomicBool, Mutex},
+        time::Duration,
+    };
     use tokio::time::timeout;
     use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
@@ -255,9 +259,13 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_client_message_handling() {
-        let client_message_handler = |_: Arc<WebSocketHub>, topic: &str, body: &str| {
-            assert_eq!("SOME_TOPIC", topic);
-            assert_eq!("Hello, host!", body);
+        let handler_calls = Arc::new(Mutex::new(Vec::new()));
+        let calls = handler_calls.clone();
+        let client_message_handler = move |_, topic: &str, body: &str| {
+            calls
+                .lock()
+                .unwrap()
+                .push((topic.to_string(), body.to_string()));
         };
 
         // Start WebSocketHub on an available port
@@ -291,5 +299,10 @@ mod integration_tests {
 
         // Allow the server a moment to process the message
         tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let final_calls = handler_calls.lock().unwrap();
+        assert_eq!(final_calls.len(), 1);
+        assert_eq!(final_calls[0].0, "SOME_TOPIC");
+        assert_eq!(final_calls[0].1, "Hello, host!");
     }
 }
