@@ -6,7 +6,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::common::messaging::MESSAGE_TOPIC_DELIMITER;
 
-use super::{ClientRead, ClientWrite};
+use super::{ClientMessageHandlerFn, ClientRead, ClientWrite};
 
 /// Encapsulates client data needed for starting and ending sessions.
 pub struct ClientSession {
@@ -15,6 +15,7 @@ pub struct ClientSession {
     pub client_write: ClientWrite,
     host_read: Arc<Mutex<Receiver<String>>>,
     subscribed_topics: Arc<Mutex<HashSet<String>>>,
+    client_message_handler: Option<ClientMessageHandlerFn>,
 }
 
 impl ClientSession {
@@ -24,6 +25,7 @@ impl ClientSession {
         client_read: ClientRead,
         client_write: ClientWrite,
         host_read: Arc<Mutex<Receiver<String>>>,
+        client_message_handler: Option<ClientMessageHandlerFn>,
     ) -> Self {
         println!("Client {} connected", client_id);
 
@@ -33,6 +35,7 @@ impl ClientSession {
             client_write,
             host_read,
             subscribed_topics: Arc::new(Mutex::new(HashSet::new())),
+            client_message_handler,
         };
 
         session
@@ -55,13 +58,16 @@ impl ClientSession {
         }
     }
 
-    async fn handle_message_from_client(&self, message: Message) {
+    async fn handle_message_from_client(
+        &self,
+        message: Message
+    ) {
         match message {
             Message::Text(text) => match text.split_once(MESSAGE_TOPIC_DELIMITER) {
                 Some((topic, body)) => {
-                    if topic == "SUBSCRIBE" {
-                        let body = body.to_string();
-                        self.subscribe_topic(body).await;
+                    self.manage_subscription(topic, body.to_string()).await;
+                    if let Some(handler) = &self.client_message_handler {
+                        handler(topic, body);
                     }
                 }
                 None => eprintln!(
@@ -80,7 +86,7 @@ impl ClientSession {
         println!("Sending message to client {}: {}", self.client_id, message);
         match message.split_once(MESSAGE_TOPIC_DELIMITER) {
             Some((topic, body)) => {
-                if self.is_subscribed(&topic.to_string()).await {
+                if self.is_subscribed(topic.to_string()).await {
                     self.send_host_message_to_client(body).await;
                 }
             }
@@ -91,13 +97,26 @@ impl ClientSession {
         }
     }
 
+    async fn manage_subscription(&self, topic: &str, body: String) {
+        if topic == "SUBSCRIBE" {
+            self.subscribe_topic(body).await;
+        } else if topic == "UNSUBSCRIBE" {
+            self.unsubscribe_topic(body).await
+        }
+    }
+
     async fn subscribe_topic(&self, topic: String) {
         println!("Client {} subscribed to {}", self.client_id, topic);
         self.subscribed_topics.lock().await.insert(topic);
     }
 
-    async fn is_subscribed(&self, topic: &String) -> bool {
-        self.subscribed_topics.lock().await.contains(topic)
+    async fn unsubscribe_topic(&self, topic: String) {
+        println!("Client {} unsubscribed from {}", self.client_id, topic);
+        self.subscribed_topics.lock().await.remove(&topic);
+    }
+
+    async fn is_subscribed(&self, topic: String) -> bool {
+        self.subscribed_topics.lock().await.contains(&topic)
     }
 
     async fn send_host_message_to_client(&self, message: &str) {

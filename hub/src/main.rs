@@ -20,7 +20,7 @@ const UNITS_TOPIC: &str = "UNITS";
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let user_config = load_config().unwrap();
-    let hub = Arc::new(WebSocketHub::new(9345));
+    let hub = Arc::new(WebSocketHub::new(9345, None));
     let hub_clone = hub.clone();
     tokio::spawn(async move { hub.start().await });
 
