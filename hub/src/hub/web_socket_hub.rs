@@ -76,28 +76,8 @@ impl WebSocketHub {
             let (write_half, read_half) = ws_stream.split();
             let client_read = Arc::new(Mutex::new(read_half));
             let client_write = Arc::new(Mutex::new(write_half));
-
-            let message_handler_clone = self_clone.clone();
-            let client_message_handler: Option<ClientMessageHandlerFn> =
-                self_clone.client_message_handler.clone().map(|handler| {
-                    Arc::new(move |topic: &str, body: &str| {
-                        handler(message_handler_clone.clone(), topic, body)
-                    }) as ClientMessageHandlerFn
-                });
-
-            let disconnect_handler_clone = self_clone.clone();
-            let client_disconnect_handler: Option<ClientDisconnectHandlerFn> =
-                Some(Arc::new(move || {
-                    let client_id_copy = client_id;
-                    let handler_clone = disconnect_handler_clone.clone();
-                    tokio::spawn(async move {
-                        handler_clone
-                            .senders_by_client_id
-                            .lock()
-                            .await
-                            .remove(&client_id_copy);
-                    });
-                }));
+            let client_message_handler = self_clone.build_client_message_handler();
+            let client_disconnect_handler = self_clone.build_client_disconnect_handler(client_id);
 
             let client_session = Arc::new(ClientSession::new(
                 client_id,
@@ -171,8 +151,38 @@ impl WebSocketHub {
             .await;
     }
 
-    async fn client_disconnect_handler(&self, client_id: u32) {
-        self.senders_by_client_id.lock().await.remove(&client_id);
+    fn build_client_message_handler(
+        self: &Arc<Self>,
+    ) -> Option<Arc<dyn Fn(&str, &str) + Send + Sync>> {
+        let message_handler_clone = self.clone();
+        let client_message_handler: Option<ClientMessageHandlerFn> =
+            self.client_message_handler.clone().map(|handler| {
+                Arc::new(move |topic: &str, body: &str| {
+                    handler(message_handler_clone.clone(), topic, body)
+                }) as ClientMessageHandlerFn
+            });
+        client_message_handler
+    }
+
+    fn build_client_disconnect_handler(
+        self: &Arc<Self>,
+        client_id: u32,
+    ) -> Option<Arc<dyn Fn() + Send + Sync>> {
+        let disconnect_handler_clone = self.clone();
+        let client_disconnect_handler: Option<ClientDisconnectHandlerFn> =
+            Some(Arc::new(move || {
+                let client_id_copy = client_id;
+                let handler_clone = disconnect_handler_clone.clone();
+                tokio::spawn(async move {
+                    println!("Dropping client {} connection", client_id);
+                    handler_clone
+                        .senders_by_client_id
+                        .lock()
+                        .await
+                        .remove(&client_id_copy);
+                });
+            }));
+        client_disconnect_handler
     }
 }
 
