@@ -1,7 +1,7 @@
 mod client_session;
 pub mod web_socket_hub;
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use futures_util::{
     lock::Mutex,
@@ -10,9 +10,12 @@ use futures_util::{
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
 
+use self::web_socket_hub::WebSocketHub;
+
 pub type ReadHalf = SplitStream<WebSocketStream<TcpStream>>;
 pub type WriteHalf = SplitSink<WebSocketStream<TcpStream>, Message>;
 pub type ClientRead = Arc<Mutex<ReadHalf>>;
 pub type ClientWrite = Arc<Mutex<WriteHalf>>;
-pub type ClientsByIdRead = Arc<Mutex<HashMap<u32, ClientRead>>>;
-pub type ClientsByIdWrite = Arc<Mutex<HashMap<u32, ClientWrite>>>;
+pub type ClientDisconnectHandlerFn = Arc<dyn Fn() + Send + Sync + 'static>;
+pub type ClientMessageHandlerFn = Arc<dyn Fn(&str, &str) + Send + Sync + 'static>;
+pub type HostClientMessageHandlerFn = Arc<dyn Fn(Arc<WebSocketHub>, &str, &str) + Send + Sync + 'static>;

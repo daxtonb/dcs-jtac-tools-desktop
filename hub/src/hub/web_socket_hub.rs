@@ -1,40 +1,49 @@
-use std::sync::{
-    atomic::{AtomicU32, Ordering},
-    Arc,
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
 };
 
-use futures_util::{future::join_all, lock::Mutex, SinkExt, StreamExt};
+use futures_util::{lock::Mutex, stream, StreamExt};
 use tokio::{
     net::TcpListener,
-    sync::mpsc::{channel, Receiver, Sender},
+    sync,
+    sync::mpsc::{self, channel, Receiver, Sender},
 };
-use tokio_tungstenite::{
-    accept_async,
-    tungstenite::{Error, Message},
+use tokio_tungstenite::{accept_async, tungstenite::Error};
+
+use crate::{
+    common::messaging::MESSAGE_TOPIC_DELIMITER,
+    hub::{ClientDisconnectHandlerFn, ClientMessageHandlerFn},
 };
 
-use super::{client_session::ClientSession, ClientsByIdRead, ClientsByIdWrite};
+use super::{client_session::ClientSession, HostClientMessageHandlerFn};
 
 /// Hub for managing web socket communication.
 pub struct WebSocketHub {
-    clients_by_id_read: ClientsByIdRead,
-    clients_by_id_write: ClientsByIdWrite,
     port: u16,
     next_client_id: Arc<AtomicU32>,
-    message_sender: Sender<String>,
+    message_sender: mpsc::Sender<String>,
+    senders_by_client_id: Arc<Mutex<HashMap<u32, Sender<String>>>>,
+    client_message_handler: Option<HostClientMessageHandlerFn>,
 }
 
 impl WebSocketHub {
     /// Instantiates a new `WebSocketHub` for a port.
-    pub fn new(port: u16) -> WebSocketHub {
+    pub fn new(
+        port: u16,
+        client_message_handler: Option<HostClientMessageHandlerFn>,
+    ) -> WebSocketHub {
         let (message_sender, message_receiver) = channel(1024);
 
         let hub = WebSocketHub {
-            clients_by_id_read: ClientsByIdRead::default(),
-            clients_by_id_write: ClientsByIdWrite::default(),
             port: port,
             next_client_id: Arc::new(AtomicU32::new(0)),
             message_sender: message_sender,
+            senders_by_client_id: Arc::new(Mutex::new(HashMap::new())),
+            client_message_handler,
         };
 
         hub.start_broadcast_task(message_receiver);
@@ -42,10 +51,11 @@ impl WebSocketHub {
     }
 
     /// Initiates listening for subscribers.
-    pub async fn start(&self) -> Result<(), Error> {
+    pub async fn start(self: Arc<Self>) -> Result<(), Error> {
         let listener = TcpListener::bind(format!("0.0.0.0:{}", self.port)).await?;
 
         while let Ok((stream, _)) = listener.accept().await {
+            let self_clone = self.clone(); // Clone self for each iteration at the beginning
             println!("Attempting to connect client...");
             let ws_stream = match accept_async(stream).await {
                 Ok(stream) => stream,
@@ -54,98 +64,146 @@ impl WebSocketHub {
                     continue;
                 }
             };
+            let client_id = self_clone.next_client_id.fetch_add(1, Ordering::Relaxed);
 
-            let clients_by_id_read = self.clients_by_id_read.clone();
-            let clients_by_id_write = self.clients_by_id_write.clone();
-            let client_id = self.next_client_id.fetch_add(1, Ordering::Relaxed);
+            let (tx, rx) = mpsc::channel(1024);
+            self_clone
+                .senders_by_client_id
+                .lock()
+                .await
+                .insert(client_id, tx);
+
             let (write_half, read_half) = ws_stream.split();
             let client_read = Arc::new(Mutex::new(read_half));
             let client_write = Arc::new(Mutex::new(write_half));
-            let client_session = ClientSession::new(
+            let client_message_handler = self_clone.build_client_message_handler();
+            let client_disconnect_handler = self_clone.build_client_disconnect_handler(client_id);
+
+            let client_session = Arc::new(ClientSession::new(
                 client_id,
-                clients_by_id_read,
-                clients_by_id_write,
                 client_read,
                 client_write,
-            )
-            .await;
-            Self::start_client_listen_task(client_session).await;
+                Arc::new(sync::Mutex::new(rx)),
+                client_message_handler,
+                client_disconnect_handler,
+            ));
+
+            Self::start_client_listen_task(client_session.clone()).await;
+            Self::start_host_listen_task(client_session).await;
         }
 
         Ok(())
     }
 
     /// Sends a message to all subscribers.
-    pub fn broadcast_message(&self, message: String) {
+    pub fn broadcast_message(&self, topic: String, message: String) {
         let message_sender = self.message_sender.clone();
         tokio::spawn(async move {
-            match message_sender.send(message.clone()).await {
+            println!(
+                "Received topic/message from host: {}{}{}",
+                topic, MESSAGE_TOPIC_DELIMITER, message
+            );
+            match message_sender
+                .send(format!("{}{}{}", topic, MESSAGE_TOPIC_DELIMITER, message))
+                .await
+            {
                 Ok(_) => println!("Message sent to clients: {}", message),
                 Err(err) => eprintln!("Failed to send message to clients: {}", err),
             }
         });
     }
 
-    async fn start_client_listen_task(client_session: ClientSession) {
+    async fn start_client_listen_task(client_session: Arc<ClientSession>) {
         tokio::spawn(async move {
+            client_session.listen_to_client().await;
+        });
+    }
 
-            println!("Successfully connected client {}", client_session.client_id);
-            // Here we're just looping to detect disconnection.
-            while let Some(result) = client_session.client_read.lock().await.next().await {
-                match result {
-                    Ok(_) => {
-                        // TODO: handle incoming client messages
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "Error on WebSocket for client {:?}: {:?}",
-                            client_session.client_id, e
-                        );
-                        break; // Exit gracefully
-                    }
-                }
-            }
+    async fn start_host_listen_task(client_session: Arc<ClientSession>) {
+        tokio::spawn(async move {
+            client_session.listen_to_host().await;
         });
     }
 
     fn start_broadcast_task(&self, mut message_receiver: Receiver<String>) {
-        let clients_by_id_write = self.clients_by_id_write.clone();
+        let clients = self.senders_by_client_id.clone();
         tokio::spawn(async move {
-            // Send messages to each client in parallel
             while let Some(message) = message_receiver.recv().await {
-                let clients = clients_by_id_write.lock().await;
-                let futures: Vec<_> = clients
-                    .iter()
-                    .map(|(_, client)| {
-                        let message = message.clone();
-                        let client = client.clone();
-                        async move {
-                            let mut client = client.lock().await;
-                            client.send(Message::text(message)).await
-                        }
-                    })
-                    .collect();
-                join_all(futures).await; // Ignoring errors for simplicity, handle as needed
+                Self::send_message_to_clients(&clients, message).await;
             }
         });
+    }
+
+    async fn send_message_to_clients(
+        clients: &Arc<Mutex<HashMap<u32, Sender<String>>>>,
+        message: String,
+    ) {
+        let clients = clients.lock().await;
+        stream::iter(clients.iter())
+            .for_each(|(client_id, sender)| {
+                let message = message.clone();
+                async move {
+                    if let Err(err) = sender.send(message).await {
+                        eprint!("Failed to send message to client {}: {:?}", client_id, err);
+                    };
+                }
+            })
+            .await;
+    }
+
+    fn build_client_message_handler(
+        self: &Arc<Self>,
+    ) -> Option<Arc<dyn Fn(&str, &str) + Send + Sync>> {
+        let message_handler_clone = self.clone();
+        let client_message_handler: Option<ClientMessageHandlerFn> =
+            self.client_message_handler.clone().map(|handler| {
+                Arc::new(move |topic: &str, body: &str| {
+                    handler(message_handler_clone.clone(), topic, body)
+                }) as ClientMessageHandlerFn
+            });
+        client_message_handler
+    }
+
+    fn build_client_disconnect_handler(
+        self: &Arc<Self>,
+        client_id: u32,
+    ) -> Option<Arc<dyn Fn() + Send + Sync>> {
+        let disconnect_handler_clone = self.clone();
+        let client_disconnect_handler: Option<ClientDisconnectHandlerFn> =
+            Some(Arc::new(move || {
+                let client_id_copy = client_id;
+                let handler_clone = disconnect_handler_clone.clone();
+                tokio::spawn(async move {
+                    println!("Dropping client {} connection", client_id);
+                    handler_clone
+                        .senders_by_client_id
+                        .lock()
+                        .await
+                        .remove(&client_id_copy);
+                });
+            }));
+        client_disconnect_handler
     }
 }
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::common::messaging::MESSAGE_TOPIC_DELIMITER;
+
     use super::*;
     use futures_util::sink::SinkExt;
     use futures_util::stream::StreamExt;
-    use std::time::Duration;
+    use std::{sync::Mutex, time::Duration};
     use tokio::time::timeout;
     use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
     #[tokio::test]
     async fn test_client_connect_broadcast_and_disconnect() {
-        // Start WebSocketHub on an available port (e.g., 0 lets the OS choose the port).
-        let hub = Arc::new(WebSocketHub::new(6655));
+        // Start WebSocketHub on an available port
+        let hub = Arc::new(WebSocketHub::new(6655, None));
         let hub_clone = hub.clone();
-        let port = hub.port;
+        let port = { hub.port };
+        let topic = "UNITS";
         tokio::spawn(async move {
             hub.start().await.expect("Failed to start the WebSocketHub");
         });
@@ -159,22 +217,28 @@ mod integration_tests {
             .await
             .expect("Failed to connect to WebSocketHub");
 
-        // Send a message from the client to test broadcasting.
-        let test_message = "Hello, WebSocketHub!";
+        // Subscribe the client to a topic
+        let test_message = format!("SUBSCRIBE{}{}", MESSAGE_TOPIC_DELIMITER, topic);
         ws_stream
             .send(Message::Text(test_message.to_string()))
             .await
             .expect("Failed to send message from client");
 
+        // Allow the server a moment to subscribe the user
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
         // Broadcast a message to all clients, including the one we just connected.
         let broadcast_message = "Broadcast message from hub";
-        hub_clone.broadcast_message(broadcast_message.to_string());
+        hub_clone.broadcast_message(topic.to_string(), broadcast_message.to_string());
 
         // Try to receive the broadcast message on the client side.
         if let Ok(Some(message)) = timeout(Duration::from_secs(5), ws_stream.next()).await {
             match message {
                 Ok(msg) => match msg {
-                    Message::Text(text) => assert_eq!(text, broadcast_message),
+                    Message::Text(text) => assert_eq!(
+                        text,
+                        format!("{}{}{}", topic, MESSAGE_TOPIC_DELIMITER, broadcast_message)
+                    ),
                     _ => panic!("Received a non-text message."),
                 },
                 Err(e) => panic!("Error receiving message: {:?}", e),
@@ -188,5 +252,133 @@ mod integration_tests {
             .close(None)
             .await
             .expect("Failed to close the WebSocket stream");
+    }
+
+    #[tokio::test]
+    async fn test_client_ignores_unsubscribed_message() {
+        // Start WebSocketHub on an available port
+        let hub = Arc::new(WebSocketHub::new(6654, None));
+        let hub_clone = hub.clone();
+        let port = { hub.port };
+        let subscribed_topic = "TOPIC1".to_string();
+        let unsubscribed_topic = "TOPIC2".to_string();
+        tokio::spawn(async move {
+            hub.start().await.expect("Failed to start the WebSocketHub");
+        });
+
+        // Give the server a moment to start up.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Connect a client to the WebSocketHub.
+        let url = format!("ws://127.0.0.1:{}", port);
+        let (mut ws_stream, _) = connect_async(url)
+            .await
+            .expect("Failed to connect to WebSocketHub");
+
+        // Subscribe the client to a topic
+        let test_message = format!("SUBSCRIBE{}{}", MESSAGE_TOPIC_DELIMITER, subscribed_topic);
+        ws_stream
+            .send(Message::Text(test_message.to_string()))
+            .await
+            .expect("Failed to send message from client");
+
+        // Allow the server a moment to subscribe the user
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Broadcast a message to all clients for the unsubscribed topic
+        let broadcast_message = "Broadcast message from hub";
+        hub_clone.broadcast_message(unsubscribed_topic, broadcast_message.to_string());
+
+        // Verify client did not receive message for unsubscribed topic
+        if let Ok(Some(message)) = timeout(Duration::from_millis(100), ws_stream.next()).await {
+            match message {
+                Ok(_) => panic!("Received message from unsubscribed topic!"),
+                Err(e) => panic!("Error receiving message: {:?}", e),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_client_message_handling() {
+        let topic = "SOME_TOPIC";
+        let message = "Hello, host!";
+        let handler_calls = Arc::new(Mutex::new(Vec::new()));
+        let calls = handler_calls.clone();
+        let client_message_handler = move |_, topic: &str, body: &str| {
+            calls
+                .lock()
+                .unwrap()
+                .push((topic.to_string(), body.to_string()));
+        };
+
+        // Start WebSocketHub on an available port
+        let hub = Arc::new(WebSocketHub::new(
+            6653,
+            Some(Arc::new(client_message_handler)),
+        ));
+        let port = { hub.port };
+        tokio::spawn(async move {
+            hub.start().await.expect("Failed to start the WebSocketHub");
+        });
+
+        // Give the server a moment to start up.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Connect a client to the WebSocketHub.
+        let url = format!("ws://127.0.0.1:{}", port);
+        let (mut ws_stream, _) = connect_async(url)
+            .await
+            .expect("Failed to connect to WebSocketHub");
+
+        if let Err(err) = ws_stream
+            .send(Message::Text(format!(
+                "{}{}{}",
+                topic, MESSAGE_TOPIC_DELIMITER, message
+            )))
+            .await
+        {
+            panic!("Error sending message: {:?}", err);
+        }
+
+        // Allow the server a moment to process the message
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let final_calls = handler_calls.lock().unwrap();
+        assert_eq!(final_calls.len(), 1);
+        assert_eq!(final_calls[0].0, topic);
+        assert_eq!(final_calls[0].1, message);
+    }
+
+    #[tokio::test]
+    async fn test_client_disconnect_handling() {
+        // Start WebSocketHub on an available port
+        let hub = Arc::new(WebSocketHub::new(6652, None));
+        let hub_clone = hub.clone();
+        let port = { hub.port };
+        tokio::spawn(async move {
+            hub.start().await.expect("Failed to start the WebSocketHub");
+        });
+
+        // Give the server a moment to start up.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Connect a client to the WebSocketHub.
+        let url = format!("ws://127.0.0.1:{}", port);
+        let (mut ws_stream, _) = connect_async(url)
+            .await
+            .expect("Failed to connect to WebSocketHub");
+
+        // Allow the server a moment to process the connection
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(1, hub_clone.senders_by_client_id.lock().await.len());
+
+        if let Err(err) = ws_stream.close(None).await {
+            panic!("Failed to close connection to hub: {:?}", err);
+        }
+
+        // Allow the server a moment to process the disconnection
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        assert_eq!(0, hub_clone.senders_by_client_id.lock().await.len());
     }
 }
