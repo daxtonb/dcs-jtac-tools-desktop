@@ -52,6 +52,8 @@ impl ClientSession {
                 Err(err) => eprintln!("Failed to receive message from client: {:?}", err),
             }
         }
+
+        self.handle_client_disconnect();
     }
 
     /// Initiates listening for messages from the host
@@ -133,13 +135,17 @@ impl ClientSession {
             );
         }
     }
-}
 
-impl Drop for ClientSession {
-    fn drop(&mut self) {
+    fn handle_client_disconnect(&self) {
         println!("Client {} disconnected", self.client_id);
         if let Some(handler) = &self.client_disconnect_handler {
             (handler)();
         }
+    }
+}
+
+impl Drop for ClientSession {
+    fn drop(&mut self) {
+        self.handle_client_disconnect();
     }
 }

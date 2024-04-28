@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc,
@@ -344,5 +344,38 @@ mod integration_tests {
         assert_eq!(final_calls.len(), 1);
         assert_eq!(final_calls[0].0, topic);
         assert_eq!(final_calls[0].1, message);
+    }
+
+    #[tokio::test]
+    async fn test_client_disconnect_handling() {
+        // Start WebSocketHub on an available port
+        let hub = Arc::new(WebSocketHub::new(6652, None));
+        let hub_clone = hub.clone();
+        let port = { hub.port };
+        tokio::spawn(async move {
+            hub.start().await.expect("Failed to start the WebSocketHub");
+        });
+
+        // Give the server a moment to start up.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Connect a client to the WebSocketHub.
+        let url = format!("ws://127.0.0.1:{}", port);
+        let (mut ws_stream, _) = connect_async(url)
+            .await
+            .expect("Failed to connect to WebSocketHub");
+        
+        // Allow the server a moment to process the connection
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(1, hub_clone.senders_by_client_id.lock().await.len());
+
+        if let Err(err) = ws_stream.close(None).await {
+            panic!("Failed to close connection to hub: {:?}", err);
+        }
+
+        // Allow the server a moment to process the disconnection
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        assert_eq!(0, hub_clone.senders_by_client_id.lock().await.len());
     }
 }
