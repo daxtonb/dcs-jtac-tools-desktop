@@ -203,7 +203,7 @@ mod integration_tests {
         let hub = Arc::new(WebSocketHub::new(6655, None));
         let hub_clone = hub.clone();
         let port = { hub.port };
-        let topic = "UNITS".to_string();
+        let topic = "UNITS";
         tokio::spawn(async move {
             hub.start().await.expect("Failed to start the WebSocketHub");
         });
@@ -229,13 +229,16 @@ mod integration_tests {
 
         // Broadcast a message to all clients, including the one we just connected.
         let broadcast_message = "Broadcast message from hub";
-        hub_clone.broadcast_message(topic, broadcast_message.to_string());
+        hub_clone.broadcast_message(topic.to_string(), broadcast_message.to_string());
 
         // Try to receive the broadcast message on the client side.
         if let Ok(Some(message)) = timeout(Duration::from_secs(5), ws_stream.next()).await {
             match message {
                 Ok(msg) => match msg {
-                    Message::Text(text) => assert_eq!(text, broadcast_message),
+                    Message::Text(text) => assert_eq!(
+                        text,
+                        format!("{}{}{}", topic, MESSAGE_TOPIC_DELIMITER, broadcast_message)
+                    ),
                     _ => panic!("Received a non-text message."),
                 },
                 Err(e) => panic!("Error receiving message: {:?}", e),
@@ -364,7 +367,7 @@ mod integration_tests {
         let (mut ws_stream, _) = connect_async(url)
             .await
             .expect("Failed to connect to WebSocketHub");
-        
+
         // Allow the server a moment to process the connection
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(1, hub_clone.senders_by_client_id.lock().await.len());
