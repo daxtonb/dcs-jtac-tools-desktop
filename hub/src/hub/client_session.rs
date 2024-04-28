@@ -59,7 +59,7 @@ impl ClientSession {
     /// Initiates listening for messages from the host
     pub async fn listen_to_host(&self) {
         while let Some(message) = self.host_read.lock().await.recv().await {
-            self.handle_message_from_host(message).await;
+            self.handle_message_from_host(message.as_str()).await;
         }
     }
 
@@ -84,12 +84,12 @@ impl ClientSession {
         }
     }
 
-    async fn handle_message_from_host(&self, message: String) {
+    async fn handle_message_from_host(&self, message: &str) {
         println!("Sending message to client {}: {}", self.client_id, message);
         match message.split_once(MESSAGE_TOPIC_DELIMITER) {
-            Some((topic, body)) => {
+            Some((topic, _)) => {
                 if self.is_subscribed(topic.to_string()).await {
-                    self.send_host_message_to_client(body).await;
+                    self.send_host_message_to_client(message).await;
                 }
             }
             None => eprintln!(
