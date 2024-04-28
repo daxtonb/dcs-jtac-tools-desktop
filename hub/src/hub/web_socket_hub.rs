@@ -1,6 +1,9 @@
-use std::sync::{
-    atomic::{AtomicU32, Ordering},
-    Arc,
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
 };
 
 use futures_util::{lock::Mutex, stream, StreamExt};
@@ -11,7 +14,10 @@ use tokio::{
 };
 use tokio_tungstenite::{accept_async, tungstenite::Error};
 
-use crate::{common::messaging::MESSAGE_TOPIC_DELIMITER, hub::ClientMessageHandlerFn};
+use crate::{
+    common::messaging::MESSAGE_TOPIC_DELIMITER,
+    hub::{ClientDisconnectHandlerFn, ClientMessageHandlerFn},
+};
 
 use super::{client_session::ClientSession, HostClientMessageHandlerFn};
 
@@ -20,7 +26,7 @@ pub struct WebSocketHub {
     port: u16,
     next_client_id: Arc<AtomicU32>,
     message_sender: mpsc::Sender<String>,
-    client_senders: Arc<Mutex<Vec<Sender<String>>>>,
+    senders_by_client_id: Arc<Mutex<HashMap<u32, Sender<String>>>>,
     client_message_handler: Option<HostClientMessageHandlerFn>,
 }
 
@@ -36,7 +42,7 @@ impl WebSocketHub {
             port: port,
             next_client_id: Arc::new(AtomicU32::new(0)),
             message_sender: message_sender,
-            client_senders: Arc::new(Mutex::new(Vec::new())),
+            senders_by_client_id: Arc::new(Mutex::new(HashMap::new())),
             client_message_handler,
         };
 
@@ -49,6 +55,7 @@ impl WebSocketHub {
         let listener = TcpListener::bind(format!("0.0.0.0:{}", self.port)).await?;
 
         while let Ok((stream, _)) = listener.accept().await {
+            let self_clone = self.clone(); // Clone self for each iteration at the beginning
             println!("Attempting to connect client...");
             let ws_stream = match accept_async(stream).await {
                 Ok(stream) => stream,
@@ -57,23 +64,40 @@ impl WebSocketHub {
                     continue;
                 }
             };
+            let client_id = self_clone.next_client_id.fetch_add(1, Ordering::Relaxed);
 
             let (tx, rx) = mpsc::channel(1024);
-            self.client_senders.lock().await.push(tx);
+            self_clone
+                .senders_by_client_id
+                .lock()
+                .await
+                .insert(client_id, tx);
 
-            let client_id = self.next_client_id.fetch_add(1, Ordering::Relaxed);
             let (write_half, read_half) = ws_stream.split();
             let client_read = Arc::new(Mutex::new(read_half));
             let client_write = Arc::new(Mutex::new(write_half));
 
-            let self_clone = self.clone();
+            let message_handler_clone = self_clone.clone();
             let client_message_handler: Option<ClientMessageHandlerFn> =
-                match self.client_message_handler.clone() {
-                    Some(handler) => Some(Arc::new(move |topic: &str, body: &str| {
-                        (handler)(self_clone.clone(), topic, body)
-                    })),
-                    None => None,
-                };
+                self_clone.client_message_handler.clone().map(|handler| {
+                    Arc::new(move |topic: &str, body: &str| {
+                        handler(message_handler_clone.clone(), topic, body)
+                    }) as ClientMessageHandlerFn
+                });
+
+            let disconnect_handler_clone = self_clone.clone();
+            let client_disconnect_handler: Option<ClientDisconnectHandlerFn> =
+                Some(Arc::new(move || {
+                    let client_id_copy = client_id;
+                    let handler_clone = disconnect_handler_clone.clone();
+                    tokio::spawn(async move {
+                        handler_clone
+                            .senders_by_client_id
+                            .lock()
+                            .await
+                            .remove(&client_id_copy);
+                    });
+                }));
 
             let client_session = Arc::new(ClientSession::new(
                 client_id,
@@ -81,6 +105,7 @@ impl WebSocketHub {
                 client_write,
                 Arc::new(sync::Mutex::new(rx)),
                 client_message_handler,
+                client_disconnect_handler,
             ));
 
             Self::start_client_listen_task(client_session.clone()).await;
@@ -121,7 +146,7 @@ impl WebSocketHub {
     }
 
     fn start_broadcast_task(&self, mut message_receiver: Receiver<String>) {
-        let clients = self.client_senders.clone();
+        let clients = self.senders_by_client_id.clone();
         tokio::spawn(async move {
             while let Some(message) = message_receiver.recv().await {
                 Self::send_message_to_clients(&clients, message).await;
@@ -129,18 +154,25 @@ impl WebSocketHub {
         });
     }
 
-    async fn send_message_to_clients(clients: &Arc<Mutex<Vec<Sender<String>>>>, message: String) {
+    async fn send_message_to_clients(
+        clients: &Arc<Mutex<HashMap<u32, Sender<String>>>>,
+        message: String,
+    ) {
         let clients = clients.lock().await;
         stream::iter(clients.iter())
-            .for_each(|client| {
+            .for_each(|(client_id, sender)| {
                 let message = message.clone();
                 async move {
-                    if let Err(err) = client.send(message).await {
-                        eprint!("Failed to send message to client: {:?}", err);
+                    if let Err(err) = sender.send(message).await {
+                        eprint!("Failed to send message to client {}: {:?}", client_id, err);
                     };
                 }
             })
             .await;
+    }
+
+    async fn client_disconnect_handler(&self, client_id: u32) {
+        self.senders_by_client_id.lock().await.remove(&client_id);
     }
 }
 
@@ -151,10 +183,7 @@ mod integration_tests {
     use super::*;
     use futures_util::sink::SinkExt;
     use futures_util::stream::StreamExt;
-    use std::{
-        sync::Mutex,
-        time::Duration,
-    };
+    use std::{sync::Mutex, time::Duration};
     use tokio::time::timeout;
     use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 

@@ -16,5 +16,6 @@ pub type ReadHalf = SplitStream<WebSocketStream<TcpStream>>;
 pub type WriteHalf = SplitSink<WebSocketStream<TcpStream>, Message>;
 pub type ClientRead = Arc<Mutex<ReadHalf>>;
 pub type ClientWrite = Arc<Mutex<WriteHalf>>;
+pub type ClientDisconnectHandlerFn = Arc<dyn Fn() + Send + Sync + 'static>;
 pub type ClientMessageHandlerFn = Arc<dyn Fn(&str, &str) + Send + Sync + 'static>;
 pub type HostClientMessageHandlerFn = Arc<dyn Fn(Arc<WebSocketHub>, &str, &str) + Send + Sync + 'static>;

@@ -6,7 +6,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::common::messaging::MESSAGE_TOPIC_DELIMITER;
 
-use super::{ClientMessageHandlerFn, ClientRead, ClientWrite};
+use super::{ClientDisconnectHandlerFn, ClientMessageHandlerFn, ClientRead, ClientWrite};
 
 /// Encapsulates client data needed for starting and ending sessions.
 pub struct ClientSession {
@@ -16,6 +16,7 @@ pub struct ClientSession {
     host_read: Arc<Mutex<Receiver<String>>>,
     subscribed_topics: Arc<Mutex<HashSet<String>>>,
     client_message_handler: Option<ClientMessageHandlerFn>,
+    client_disconnect_handler: Option<ClientDisconnectHandlerFn>,
 }
 
 impl ClientSession {
@@ -26,6 +27,7 @@ impl ClientSession {
         client_write: ClientWrite,
         host_read: Arc<Mutex<Receiver<String>>>,
         client_message_handler: Option<ClientMessageHandlerFn>,
+        client_disconnect_handler: Option<ClientDisconnectHandlerFn>,
     ) -> Self {
         println!("Client {} connected", client_id);
 
@@ -36,6 +38,7 @@ impl ClientSession {
             host_read,
             subscribed_topics: Arc::new(Mutex::new(HashSet::new())),
             client_message_handler,
+            client_disconnect_handler,
         };
 
         session
@@ -58,10 +61,7 @@ impl ClientSession {
         }
     }
 
-    async fn handle_message_from_client(
-        &self,
-        message: Message
-    ) {
+    async fn handle_message_from_client(&self, message: Message) {
         match message {
             Message::Text(text) => match text.split_once(MESSAGE_TOPIC_DELIMITER) {
                 Some((topic, body)) => {
@@ -138,5 +138,8 @@ impl ClientSession {
 impl Drop for ClientSession {
     fn drop(&mut self) {
         println!("Client {} disconnected", self.client_id);
+        if let Some(handler) = &self.client_disconnect_handler {
+            (handler)();
+        }
     }
 }
