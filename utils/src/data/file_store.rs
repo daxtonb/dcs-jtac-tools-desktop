@@ -59,7 +59,7 @@ pub trait FileStore<T: Serialize + DeserializeOwned> {
 }
 
 #[cfg(test)]
-mod tests {
+mod integration_tests {
     use super::*;
     use std::fs;
 
@@ -75,6 +75,7 @@ mod tests {
             .ok()
             .and_then(|s| s.parse::<u32>().ok());
         assert_eq!(stored_value.unwrap(), 42);
+        fs::remove_file(path).unwrap();
     }
 
     #[test]
@@ -91,14 +92,16 @@ mod tests {
         let result = TestFileStore::set(path, &value);
         assert!(result.is_ok());
         assert!(std::path::Path::new(path).exists());
+        fs::remove_file(path).unwrap();
     }
 
     #[test]
     fn test_set_file_content() {
-        let path = "new_file.json";
+        let path = "new_file2.json";
         let value = 123;
         TestFileStore::set(path, &value).unwrap();
         let stored_value = TestFileStore::get(path);
         assert_eq!(stored_value, Some(value));
+        fs::remove_file(path).unwrap();
     }
 }
