@@ -2,14 +2,28 @@ use std::{error::Error, fs, path::PathBuf};
 
 use regex::Regex;
 
+/// Represents the display settings, including width, height, and profile name.
 #[derive(Debug)]
+/// Represents the display settings for the application.
 pub struct DisplaySettings {
+    /// The width of the display.
     pub width: u16,
+    /// The height of the display.
     pub height: u16,
+    /// The name of the profile associated with the display settings.
     pub profile_name: String,
 }
 
 impl DisplaySettings {
+    /// Creates a new `DisplaySettings` instance by reading the settings from a file.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - The path to the file containing the display settings.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing the `DisplaySettings` instance if successful, or an error if reading the file or parsing the settings fails.
     pub fn from_file(file_path: &PathBuf) -> Result<Self, Box<dyn Error>> {
         match fs::read_to_string(file_path) {
             Ok(contents) => Ok(DisplaySettings {
@@ -25,6 +39,15 @@ impl DisplaySettings {
     }
 }
 
+/// Retrieves the height setting from the file contents.
+///
+/// # Arguments
+///
+/// * `contents` - The contents of the file.
+///
+/// # Returns
+///
+/// Returns the height value if found and successfully parsed, or an error if the height setting is not found or cannot be parsed.
 fn get_height_from_file_contents(contents: &String) -> Result<u16, Box<dyn Error>> {
     let height_regex: Regex = Regex::new(r#"\["height"\] = (\d+)"#).unwrap();
     let height = match height_regex.captures(contents) {
@@ -43,6 +66,15 @@ fn get_height_from_file_contents(contents: &String) -> Result<u16, Box<dyn Error
     Ok(height)
 }
 
+/// Retrieves the width setting from the file contents.
+///
+/// # Arguments
+///
+/// * `contents` - The contents of the file.
+///
+/// # Returns
+///
+/// Returns the width value if found and successfully parsed, or an error if the width setting is not found or cannot be parsed.
 fn get_width_from_file_contents(contents: &String) -> Result<u16, Box<dyn Error>> {
     let width_regex: Regex = Regex::new(r#"\["width"\] = (\d+)"#).unwrap();
     let width = match width_regex.captures(&contents) {
@@ -61,6 +93,15 @@ fn get_width_from_file_contents(contents: &String) -> Result<u16, Box<dyn Error>
     Ok(width)
 }
 
+/// Retrieves the display profile setting from the file contents.
+///
+/// # Arguments
+///
+/// * `contents` - The contents of the file.
+///
+/// # Returns
+///
+/// Returns the display profile value if found, or an error if the display profile setting is not found.
 fn get_display_profile_from_file_contents(contents: &String) -> Result<String, Box<dyn Error>> {
     let profile_regex: Regex =
         Regex::new(r#"\["multiMonitorSetup"\] = "([a-zA-Z0-9\+\(\)]+)""#).unwrap();
@@ -74,6 +115,7 @@ fn get_display_profile_from_file_contents(contents: &String) -> Result<String, B
 
     Ok(profile.to_string())
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
