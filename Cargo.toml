@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "hub",
+    "utils",
+    "vdl"
+]
+resolver = "2"

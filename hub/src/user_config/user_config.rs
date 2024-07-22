@@ -1,9 +1,5 @@
-use std::{
-    fs::File,
-    io::{self, BufRead, BufReader, BufWriter, Write},
-};
-
 use serde::{Deserialize, Serialize};
+use utils::data::file_store::FileStore;
 
 use crate::common::{
     dcs_unit::{Coalition, DcsUnit},
@@ -25,31 +21,9 @@ pub struct UserConfig {
     pub export_frequency_frames: i32,
 }
 
+impl FileStore<UserConfig> for UserConfig {}
+
 impl UserConfig {
-    /// Loads the user configuration from the file system.
-    pub fn from_file(file_path: &str) -> io::Result<UserConfig> {
-        let mut string_contents = String::new();
-        let file = File::open(file_path)?;
-        let buffer = BufReader::new(file);
-
-        for line in buffer.lines() {
-            string_contents.push_str(line?.as_str());
-        }
-
-        Ok(serde_json::from_str(&string_contents)?)
-    }
-
-    /// Writes the user configuration to the file system.
-    pub fn to_file(&self, file_path: &str) -> io::Result<()> {
-        let json = serde_json::to_string(self)?;
-        let file = File::create(file_path)?;
-        let mut buffer = BufWriter::new(file);
-
-        buffer.write_all(json.as_bytes())?;
-
-        Ok(())
-    }
-
     pub fn is_unit_configured(&self, unit: &DcsUnit) -> bool {
         self.is_coalition_configured(unit) && self.is_unit_type_configured(unit)
     }
@@ -91,9 +65,7 @@ mod unit_tests {
             unit_type::Level1UnitType,
         },
         user_config::{
-            coalition_flag::CoalitionFlag,
-            unit_type_flag::UnitTypeFlag,
-            user_config::UserConfig,
+            coalition_flag::CoalitionFlag, unit_type_flag::UnitTypeFlag, user_config::UserConfig,
         },
     };
 
@@ -175,7 +147,7 @@ mod unit_tests {
         let unit = build_dcs_unit(Some(Coalition::REDFOR), Some(Level1UnitType::AIR));
 
         assert!(!config.is_unit_configured(&unit));
-        
+
         let config = build_user_config(Some(CoalitionFlag::BLUFOR), Some(UnitTypeFlag::GROUND));
         let unit = build_dcs_unit(Some(Coalition::BLUFOR), Some(Level1UnitType::AIR));
 
@@ -231,6 +203,8 @@ mod unit_tests {
 mod integration_tests {
     use std::fs;
 
+    use utils::data::file_store::FileStore;
+
     use super::UserConfig;
     use crate::user_config::{coalition_flag::CoalitionFlag, unit_type_flag::UnitTypeFlag};
 
@@ -244,13 +218,11 @@ mod integration_tests {
             export_frequency_frames: 10,
         };
 
-        config
-            .to_file(file_path)
-            .expect("Failed to write UserConfig to file.");
+        UserConfig::set(file_path, &config).expect("Failed to write UserConfig to file.");
 
         // Read
         let config_from_file =
-            UserConfig::from_file(file_path).expect("Failed to read UserConfig from file.");
+            UserConfig::get(file_path).expect("Failed to read UserConfig from file.");
 
         assert_eq!(config_from_file, config);
 

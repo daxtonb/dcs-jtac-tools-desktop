@@ -153,7 +153,7 @@ impl WebSocketHub {
 
     fn build_client_message_handler(
         self: &Arc<Self>,
-    ) -> Option<Arc<dyn Fn(&str, &str) + Send + Sync>> {
+    ) -> Option<ClientMessageHandlerFn> {
         let message_handler_clone = self.clone();
         let client_message_handler: Option<ClientMessageHandlerFn> =
             self.client_message_handler.clone().map(|handler| {
@@ -167,7 +167,7 @@ impl WebSocketHub {
     fn build_client_disconnect_handler(
         self: &Arc<Self>,
         client_id: u32,
-    ) -> Option<Arc<dyn Fn() + Send + Sync>> {
+    ) -> Option<ClientDisconnectHandlerFn> {
         let disconnect_handler_clone = self.clone();
         let client_disconnect_handler: Option<ClientDisconnectHandlerFn> =
             Some(Arc::new(move || {

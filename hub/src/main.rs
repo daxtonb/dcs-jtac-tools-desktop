@@ -6,6 +6,7 @@ use udp_listener::listen;
 use user_config::{
     coalition_flag::CoalitionFlag, unit_type_flag::UnitTypeFlag, user_config::UserConfig,
 };
+use utils::data::file_store::FileStore;
 
 use crate::cursor_on_target::xml_serializer::XmlSerializer;
 
@@ -20,7 +21,7 @@ const UNITS_TOPIC: &str = "UNITS";
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let user_config = load_config().unwrap();
-    let hub = Arc::new(WebSocketHub::new(9345, None));
+    let hub = Arc::new(WebSocketHub::new(9345, None)); // <-- TODO: define handler for VDL traffic
     let hub_clone = hub.clone();
     tokio::spawn(async move { hub.start().await });
 
@@ -46,15 +47,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 fn load_config() -> Result<UserConfig, Box<dyn Error>> {
     const CONFIG_FILE_PATH: &str = "hub.config";
-    let user_config = match UserConfig::from_file(CONFIG_FILE_PATH) {
-        Ok(config_from_file) => config_from_file,
-        Err(_) => {
+    let user_config = match UserConfig::get(CONFIG_FILE_PATH) {
+        Some(config_from_file) => config_from_file,
+        None => {
             let new_config = UserConfig {
                 coalition_flag: CoalitionFlag::BLUFOR,
                 unit_type_flag: UnitTypeFlag::GROUND | UnitTypeFlag::AIR | UnitTypeFlag::SEA,
                 export_frequency_frames: 100,
             };
-            new_config.to_file(CONFIG_FILE_PATH)?;
+            UserConfig::set(CONFIG_FILE_PATH, &new_config)?;
             new_config
         }
     };

@@ -9,12 +9,11 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Build hub
-      run: cargo build --manifest-path hub/Cargo.toml --verbose
-    - name: Run tests
-      run: cargo test --manifest-path hub/Cargo.toml --verbose
+      - uses: actions/checkout@v3
+      - name: Build hub
+        run: cargo build
+      - name: Run tests
+        run: cargo test
