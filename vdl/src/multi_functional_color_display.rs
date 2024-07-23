@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::display_settings::{self, DisplaySettings};
+use crate::display_settings::DisplaySettings;
 
 /// Represents the position of a multi-functional color display.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn test_from_file_success() {
-        let file_path = PathBuf::from("test_settings1.txt");
+        let file_path = PathBuf::from("mfcd_test_settings1.txt");
         let display_settings = DisplaySettings {
             width: 1920,
             height: 1080,
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_from_file_with_partial_mfds_defined_success() {
-        let file_path = PathBuf::from("test_settings2.txt");
+        let file_path = PathBuf::from("mfcd_test_settings2.txt");
         let display_settings = DisplaySettings {
             width: 1920,
             height: 1080,
