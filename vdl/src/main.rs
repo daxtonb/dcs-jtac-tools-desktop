@@ -30,6 +30,9 @@ fn main() {
         exit(1);
     }
     println!("{:?}", display_settings);
+    mfcd_settings.iter().for_each(|(position, mfcd)| {
+        println!("{:?}: {:?}", position, mfcd);
+    });
     println!("Hello, world!");
 }
 

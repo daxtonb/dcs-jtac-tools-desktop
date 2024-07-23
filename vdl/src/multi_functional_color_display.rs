@@ -13,6 +13,7 @@ pub enum MfcdPosition {
 }
 
 /// Represents a multi-functional color display.
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct MultiFunctionalColorDisplay {
     /// The x-position of the display.
     pub x_position: u16,
@@ -30,11 +31,12 @@ impl MultiFunctionalColorDisplay {
     /// # Arguments
     ///
     /// * `file_path` - The path to the file to be read.
+    /// * `display_settings` - The display settings used for parsing dynamic values.
     ///
     /// # Returns
     ///
-    /// A Result containing a HashMap of `MultiFunctionalColorDisplay` objects, with the `MfcdPosition` as the key and the `MultiFunctionalColorDisplay` as the value.
-    /// If the file cannot be read or an error occurs, an Err containing a Box<dyn Error> is returned.
+    /// A `Result` containing a `HashMap` of `MultiFunctionalColorDisplay` objects, with the `MfcdPosition` as the key and the `MultiFunctionalColorDisplay` as the value.
+    /// If the file cannot be read or an error occurs, an `Err` containing a `Box<dyn Error>` is returned.
     pub fn all_from_file(
         file_path: &PathBuf,
         display_settings: &DisplaySettings,
@@ -69,6 +71,7 @@ impl MultiFunctionalColorDisplay {
 ///
 /// * `position` - The position of the multi-functional color display.
 /// * `contents` - The contents of the file.
+/// * `display_settings` - The display settings used for parsing dynamic values.
 ///
 /// # Returns
 ///
@@ -91,41 +94,69 @@ fn get_from_file_contents(
     .unwrap();
     if let Some(captures) = regex.captures(contents) {
         Some(MultiFunctionalColorDisplay {
-            x_position: extract_and_parse_integer_from_group(&captures, 1).unwrap(),
-            y_position: extract_and_parse_integer_from_group(&captures, 2).unwrap(),
-            width: extract_and_parse_integer_from_group(&captures, 3).unwrap(),
-            height: extract_and_parse_integer_from_group(&captures, 4).unwrap(),
+            x_position: extract_and_parse_value_from_group(&captures, 1, display_settings).unwrap(),
+            y_position: extract_and_parse_value_from_group(&captures, 2, display_settings).unwrap(),
+            width: extract_and_parse_value_from_group(&captures, 3, display_settings).unwrap(),
+            height: extract_and_parse_value_from_group(&captures, 4, display_settings).unwrap(),
         })
     } else {
         None
     }
 }
 
-/// Extracts and parses a group from regex captures as an integer.
+/// Extracts and parses a group from regex captures as an integer. Handles dynamic cases based on screen width or height.
 ///
 /// # Arguments
 ///
 /// * `captures` - The regex captures.
 /// * `group_index` - The index of the group to extract and parse.
+/// * `display_settings` - The display settings used for parsing dynamic values.
 ///
 /// # Returns
 ///
 /// Returns a `Result` containing the parsed value if successful, or an error if parsing fails.
-fn extract_and_parse_integer_from_group(
+fn extract_and_parse_value_from_group(
     captures: &regex::Captures,
     group_index: usize,
+    display_settings: &DisplaySettings,
 ) -> Result<u16, Box<dyn Error>> {
     match captures.get(group_index) {
-        Some(capture) => match capture.as_str().parse::<u16>() {
-            Ok(x) => Ok(x),
-            Err(err) => {
-                eprintln!(
-                    "Failed to parse to integer for group {}: {:?}",
-                    group_index, err
-                );
-                Err(err.to_string().into())
+        Some(capture) => {
+            let value = capture.as_str();
+
+            // CASE 1: dynamic value based on screen width or height
+            if value.starts_with("screen") {
+                let screen_parts = value.split('.').collect::<Vec<&str>>();
+                if screen_parts.len() != 2 {
+                    return Err(format!("Value is in unexpected format: {}", value).into());
+                }
+                let division_parts = screen_parts[1].split('/').collect::<Vec<&str>>();
+                let dividend = match division_parts[0].trim() {
+                    "width" => display_settings.width,
+                    "height" => display_settings.height,
+                    _ => return Err(format!("Invalid screen part: {}", screen_parts[1]).into()),
+                };
+                // CASE 2: value is a fraction of the screen width or height
+                if division_parts.len() == 2 {
+                    let divisor = match division_parts[1].trim().parse::<u16>() {
+                        Ok(divisor) => divisor,
+                        Err(err) => {
+                            return Err(
+                                format!("Failed to parse divisor to integer: {:?}", err).into()
+                            )
+                        }
+                    };
+                    return Ok(dividend / divisor);
+                }
+                return Ok(dividend);
             }
-        },
+
+            // CASE 3: value is a static integer
+            match value.parse::<u16>() {
+                Ok(value) => Ok(value),
+                Err(err) => Err(format!("Failed to parse value to integer: {:?}", err).into()),
+            }
+        }
         None => Err(format!("Failed to find group {}", group_index).into()),
     }
 }
@@ -162,10 +193,10 @@ mod tests {
 
         CENTER_MFCD = 
         {
-            x = 50;
-            y = 60;
-            width = 200;
-            height = 300;
+            x = screen.width / 2;
+            y = screen.height / 2;
+            width = screen.width;
+            height = screen.height;
         }";
         fs::write(&file_path, contents).unwrap();
 
@@ -188,10 +219,10 @@ mod tests {
 
         assert!(settings.contains_key(&MfcdPosition::Center));
         let center_mfcd = settings.get(&MfcdPosition::Center).unwrap();
-        assert_eq!(center_mfcd.x_position, 50);
-        assert_eq!(center_mfcd.y_position, 60);
-        assert_eq!(center_mfcd.width, 200);
-        assert_eq!(center_mfcd.height, 300);
+        assert_eq!(center_mfcd.x_position, 960);
+        assert_eq!(center_mfcd.y_position, 540);
+        assert_eq!(center_mfcd.width, 1920);
+        assert_eq!(center_mfcd.height, 1080);
 
         fs::remove_file(&file_path).unwrap();
     }
@@ -297,8 +328,13 @@ mod tests {
         let regex = Regex::new(r"(\d+) (\d+) (\d+) (\d+)").unwrap();
         let captures = regex.captures("10 20 100 200").unwrap();
         let group_index = 1;
+        let display_settings = DisplaySettings {
+            width: 1920,
+            height: 1080,
+            profile_name: "test_profile".to_string(),
+        };
 
-        let result = extract_and_parse_integer_from_group(&captures, group_index);
+        let result = extract_and_parse_value_from_group(&captures, group_index, &display_settings);
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
@@ -309,8 +345,13 @@ mod tests {
         let regex = Regex::new(r"(\w+) (\d+) (\d+) (\d+)").unwrap();
         let captures = regex.captures("invalid 20 100 200").unwrap();
         let group_index = 1;
+        let display_settings = DisplaySettings {
+            width: 1920,
+            height: 1080,
+            profile_name: "test_profile".to_string(),
+        };
 
-        let result = extract_and_parse_integer_from_group(&captures, group_index);
+        let result = extract_and_parse_value_from_group(&captures, group_index, &display_settings);
 
         assert!(result.is_err());
     }
